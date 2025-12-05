@@ -15,141 +15,68 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Xml.Serialization;
 
-namespace AddOns.Aurora.SDK
+namespace NinjaTrader.Custom.AddOns.Aurora.SDK
 {
-    #region Signal Engine
-    public class SignalEngine
+    public class AuroraStrategy
     {
-        // the purpose of the signal engine is to loop through signal logic blocks to spit out either Long Short or Neutral.
-        // the challenge comes when summarizing the outputs of the logic block
+        // this is the top level class for Aurora Strategies,
+        internal StrategyBase _Host;
 
-        public struct SignalProduct
+        internal List<ISeries<double>> _Primaries;
+        // TODO: Create a time series data structure to hold external data sources
+        // TODO: Then create a dict or list to hold those datastructures to be called by logic blocks
+
+        public SignalEngine _signalEngine { get; private set; }
+        public RiskEngine _riskEngine { get; private set; }
+        public UpdateEngine _updateEngine { get; private set; }
+        public ExecutionEngine _executionEngine { get; private set; }
+
+
+        public AuroraStrategy(StrategyBase Host, List<LogicBlock> Blocks) // this would be called during DataLoaded
         {
-            public OrderType orderType;
-            public MarketPosition direction;
-            public string Name;
+            _Host = Host;
+            _Primaries = LoadPrimarySeries();
+
+            List<LogicBlock> _sBlocks = ParseLogicBlocks(Blocks, BlockTypes.Signal);
+            List<LogicBlock> _rBlocks = ParseLogicBlocks(Blocks, BlockTypes.Risk);
+            List<LogicBlock> _uBlocks = ParseLogicBlocks(Blocks, BlockTypes.Update);
+            //List<LogicBlock> _eBlocks = ParseLogicBlocks(Blocks, BlockTypes.Signal);
+
+            _signalEngine = new(Host, _sBlocks);
+            _riskEngine = new(Host, _rBlocks);
+            _updateEngine = new(Host, _uBlocks);
+            //_executionEngine = new();
         }
 
-        private StrategyBase _host;
-        private List<LogicBlock> _logicblocks;
-        private Dictionary<int, Series<double>> _persistantStorage;
-
-        public SignalEngine(StrategyBase Host, List<LogicBlock> LogicBlocks, Dictionary<int, Series<double>> PersistantStorage)
+        public List<ISeries<double>> LoadPrimarySeries()
         {
-            _host = Host;
+            List<ISeries<double>> primaries = [];
+            primaries.Clear();
 
-            foreach (LogicBlock lb in LogicBlocks)
-                if (lb.Type != BlockTypes.Signal) throw new ArrayTypeMismatchException();
+            foreach (var barSeries in _Host.BarsArray)
+                _Primaries.Add(barSeries);
 
-            _logicblocks = [.. LogicBlocks];
-            _persistantStorage = PersistantStorage;
+            return primaries;
         }
 
-        public SignalProduct Evaluate()
+        public List<LogicBlock> ParseLogicBlocks(List<LogicBlock> blocks, BlockTypes type)
         {
-            SignalProduct SP = new();
-            Dictionary<int, LogicTicket> logicOutputs = new Dictionary<int, LogicTicket>();
-            int biasCount = 0;
-
-            foreach (LogicBlock lb in _logicblocks)
+            List<LogicBlock> parsedBlocks = [];
+            foreach (LogicBlock block in blocks)
             {
-                logicOutputs[lb.Id] = lb.Forward();
-                switch(logicOutputs[lb.Id].SubType)
-                {
-                    case BlockSubTypes.Bias:
-                        if (logicOutputs[lb.Id].Value is true)
-                            biasCount++;
-                        else
-                            biasCount--;
-                        break;
-                    case BlockSubTypes.Filter:
-                        if (logicOutputs[lb.Id].Value is false)
-                            return new SignalProduct
-                            {
-                                orderType = OrderType.Market,
-                                direction = MarketPosition.Flat,
-                                Name = "Filtered"
-                            };
-                        break;
-                    default:
-                        throw new NotImplementedException(); // TODO: implement correct exception
-                }
+                if (block.Type == type)
+                    parsedBlocks.Add(block);
             }
-
-            if (biasCount > 0)
-            {
-                SP.direction = MarketPosition.Long;
-                SP.orderType = OrderType.Market;
-                SP.Name = "Long Bias";
-            }
-            else if (biasCount < 0)
-            {
-                SP.direction = MarketPosition.Short;
-                SP.orderType = OrderType.Market;
-                SP.Name = "Short Bias";
-            }
-            else
-            {
-                SP.direction = MarketPosition.Flat;
-                SP.orderType = OrderType.Market;
-                SP.Name = "Neutral Bias";
-            }
-
-            return SP;
+            return parsedBlocks;
         }
-    }
-    #endregion
 
-    #region Risk Engine
-    public class RiskEngine
-    {
-        public struct RiskProduct
+        public void BarUpdate()
         {
-            public int size;
-            public string Name;
+            SignalEngine.SignalProduct SGL1 = _signalEngine.Evaluate(); // should we have a global state datastructure?
+            RiskEngine.RiskProduct RSK1 = _riskEngine.Evaluate(SGL1); // TODO: Risk Engine currently does NOT use SignalProduct, need to implement that
+
+            _updateEngine.Update(UpdateEngine.UpdateTypes.OnBarUpdate);
+            ExecutionEngine.ExecutionProduct EXC1 = _executionEngine.Execute(SGL1, RSK1);
         }
-
-        private StrategyBase _host;
-        private List<LogicBlock> _logicblocks;
-
-        public RiskEngine(StrategyBase Host, List<LogicBlock> LogicBlocks)
-        {
-            _host = Host;
-            // clean the list of logic blocks to make sure they are all the valid type of logic block
-
-            foreach (LogicBlock lb in LogicBlocks)
-                if (lb.Type != BlockTypes.Risk)throw new ArrayTypeMismatchException();
-
-            _logicblocks = [.. LogicBlocks];
-        }
-
-        public RiskProduct Evaluate()
-        {
-            // some type of persistant object to store logic outputs
-
-            foreach (LogicBlock lb in _logicblocks)
-            {
-                //lb.Forward(); // save to persistant storage object
-            }
-
-            // do some further processing to get the risk product
-
-            return new RiskProduct
-            {
-            };
-        }
-    }
-    #endregion
-
-    #region Update Engine
-    public class UpdateEngine
-    {
-
-    }
-    #endregion
-
-    public class ExecutionEngine
-    {
-
     }
 }

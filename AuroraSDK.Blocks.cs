@@ -1,17 +1,30 @@
-using NinjaTrader.Cbi;
-using NinjaTrader.Data;
-using NinjaTrader.NinjaScript;
+#region Definitions
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using System.Collections.Generic;
+using NinjaTrader.Cbi;
+using System.ComponentModel.DataAnnotations;
+using NinjaTrader.NinjaScript.Indicators;
+using System.IO.Pipes;
+using System.IO;
+using System.Threading;
+using System.Diagnostics;
+using NinjaTrader.NinjaScript.DrawingTools;
+using System.Drawing;
+using System.Windows.Media;
+using System.Windows.Controls;
+using NinjaTrader.CQG.ProtoBuf;
+using System.Linq;
+using NinjaTrader.NinjaScript;
+#endregion
 
-namespace AddOns.Aurora.SDK
+
+namespace NinjaTrader.Custom.AddOns.Aurora.SDK
 {
     public enum BlockTypes
     {
         Signal,
+        Update,
         Risk,
     };
 
@@ -26,10 +39,11 @@ namespace AddOns.Aurora.SDK
     public struct BlockConfig
     {
         public int BlockId;
-        public List<int> DataIds;
+        public List<int> DataIds; // wtf is this used for
         public BlockTypes BlockType;
         public Type DataType;
         public BlockSubTypes BlockSubType;
+        public Dictionary<string, object> Parameters;
     }
 
     public struct LogicTicket
@@ -37,13 +51,14 @@ namespace AddOns.Aurora.SDK
         public int Id;
         public BlockTypes Type;
         public BlockSubTypes SubType;
-        public bool Value;
+        public Type DataType;
+        public object Value;
     }
 
     public abstract class LogicBlock
     {
-        private StrategyBase _host;
-
+        internal StrategyBase _host;
+        public Dictionary<string, object> Parameters { get; private set; }
         public List<int> DataIds { get; private set; }
         public Type DataType { get; private set; }
         public int Id { get; private set; }
@@ -57,6 +72,7 @@ namespace AddOns.Aurora.SDK
             this.SubType = Config.BlockSubType;
             this.DataType = Config.DataType;
             this.DataIds = Config.DataIds;
+            this.Parameters = Config.Parameters;
         }
 
         public abstract LogicTicket Forward();
