@@ -1,21 +1,22 @@
 ﻿#region Definitions
-using System;
-using System.Text;
-using System.Collections.Generic;
 using NinjaTrader.Cbi;
-using System.ComponentModel.DataAnnotations;
-using NinjaTrader.NinjaScript.Indicators;
-using System.IO.Pipes;
-using System.IO;
-using System.Threading;
-using System.Diagnostics;
-using NinjaTrader.NinjaScript.DrawingTools;
-using System.Drawing;
-using System.Windows.Media;
-using System.Windows.Controls;
 using NinjaTrader.CQG.ProtoBuf;
-using System.Linq;
 using NinjaTrader.NinjaScript;
+using NinjaTrader.NinjaScript.DrawingTools;
+using NinjaTrader.NinjaScript.Indicators;
+using System;
+using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using System.Diagnostics;
+using System.Drawing;
+using System.IO;
+using System.IO.Pipes;
+using System.Linq;
+using System.Text;
+using System.Threading;
+using System.Windows.Controls;
+using System.Windows.Media;
+using static NinjaTrader.Custom.AddOns.Aurora.SDK.SignalEngine;
 #endregion
 
 
@@ -114,10 +115,12 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
 
         private StrategyBase _host;
         private List<LogicBlock> _logicblocks;
+        int BaseContracts { get; set; } = 1;
 
-        public RiskEngine(StrategyBase Host, List<LogicBlock> LogicBlocks)
+        public RiskEngine(StrategyBase Host, List<LogicBlock> LogicBlocks, int BaseCons)
         {
             _host = Host;
+            BaseContracts = BaseCons;
             // TODO: clean the list of logic blocks to make sure they are all the valid type of logic block
 
             foreach (LogicBlock lb in LogicBlocks)
@@ -126,61 +129,84 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
             _logicblocks = [.. LogicBlocks];
         }
 
-        public RiskProduct Evaluate(SignalEngine.SignalProduct SP1)
+        public RiskProduct Evaluate(SignalEngine.SignalProduct sp1)
         {
-            List<LogicTicket> logicOutputs = new List<LogicTicket>();
+            var rp = new RiskProduct();
+            var logicOutputs = new Dictionary<int, LogicTicket>();
+            double multiplier = 1.0;
+            int contractLimit = int.MaxValue;
 
-            foreach (LogicBlock lb in _logicblocks)
+            foreach (var lb in _logicblocks)
             {
-                logicOutputs.Add(lb.Forward());
+                var output = lb.Forward();
+                logicOutputs[lb.Id] = output;
+
+                switch (output.SubType)
+                {
+                    case BlockSubTypes.Multiplier:
+                        multiplier *= (double)output.Value;
+                        break;
+
+                    case BlockSubTypes.Limit:
+                        contractLimit = Math.Min(contractLimit, (int)output.Value);
+                        break;
+
+                    default:
+                        throw new NotSupportedException($"Unsupported block subtype: {output.SubType}");
+                }
             }
 
-            // do some further processing to get the risk product
+            int contracts = (int)Math.Round(multiplier);
 
-            return new RiskProduct
+            if (contracts > contractLimit)
+                contracts = contractLimit;
+
+            if (contracts < 0)
+                contracts = 0;
+
+            rp.size = contracts;
+            return rp;
+        }
+
+        #endregion
+
+        #region Update Engine
+        public class UpdateEngine
+        {
+            // update engine will have multiple methods to be called from the strategy core methods
+            public enum UpdateTypes
             {
-                
-            };
+                OnBarUpdate,
+                OnExecutionUpdate,
+                OnOrderUpdate,
+                OnPositionUpdate
+            }
+
+            public UpdateEngine(StrategyBase Host, List<LogicBlock> LogicBlocks)
+            {
+                throw new NotImplementedException();
+            }
+
+            public void Update(UpdateTypes type)
+            {
+                throw new NotImplementedException();
+            }
         }
+        #endregion
+
+        #region Execution Engine
+        public class ExecutionEngine
+        {
+            public struct ExecutionProduct
+            {
+                public string info;
+            }
+
+            public ExecutionProduct Execute(SignalEngine.SignalProduct SP1, RiskEngine.RiskProduct RP1)
+            {
+                throw new NotImplementedException();
+            }
+        }
+        #endregion
     }
-    #endregion
-
-    #region Update Engine
-    public class UpdateEngine
-    {
-        // update engine will have multiple methods to be called from the strategy core methods
-        public enum UpdateTypes
-        {
-            OnBarUpdate,
-            OnExecutionUpdate,
-            OnOrderUpdate,
-            OnPositionUpdate
-        }
-
-        public UpdateEngine(StrategyBase Host, List<LogicBlock> LogicBlocks)
-        {
-            throw new NotImplementedException();
-        }
-
-        public void Update(UpdateTypes type)
-        {
-            throw new NotImplementedException();
-        }
-    }
-    #endregion
-
-    #region Execution Engine
-    public class ExecutionEngine
-    {
-        public struct ExecutionProduct
-        {
-            public string info;
-        }
-
-        public ExecutionProduct Execute(SignalEngine.SignalProduct SP1, RiskEngine.RiskProduct RP1)
-        {
-            throw new NotImplementedException();
-        }
-    }
-    #endregion
 }
