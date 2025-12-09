@@ -26,7 +26,8 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
         Signal,
         Update,
         Risk,
-    };
+        Execution
+    }
 
     public enum BlockSubTypes
     {
@@ -34,7 +35,7 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
         Filter,
         Multiplier,
         Limit
-    };
+    }
 
     public struct BlockConfig
     {

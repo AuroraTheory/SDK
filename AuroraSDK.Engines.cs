@@ -1,4 +1,4 @@
-﻿#region Definitions
+#region Definitions
 using NinjaTrader.Cbi;
 using NinjaTrader.CQG.ProtoBuf;
 using NinjaTrader.NinjaScript;
@@ -17,6 +17,9 @@ using System.Threading;
 using System.Windows.Controls;
 using System.Windows.Media;
 using static NinjaTrader.Custom.AddOns.Aurora.SDK.SignalEngine;
+using static NinjaTrader.Custom.AddOns.Aurora.SDK.RiskEngine;
+using static NinjaTrader.Custom.AddOns.Aurora.SDK.UpdateEngine;
+using static NinjaTrader.Custom.AddOns.Aurora.SDK.ExecutionEngine;
 #endregion
 
 
@@ -129,7 +132,7 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
             _logicblocks = [.. LogicBlocks];
         }
 
-        public RiskProduct Evaluate(SignalEngine.SignalProduct sp1)
+        public RiskProduct Evaluate()
         {
             var rp = new RiskProduct();
             var logicOutputs = new Dictionary<int, LogicTicket>();
@@ -167,6 +170,7 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
             rp.size = contracts;
             return rp;
         }
+	}
 
         #endregion
 
@@ -184,12 +188,12 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
 
             public UpdateEngine(StrategyBase Host, List<LogicBlock> LogicBlocks)
             {
-                throw new NotImplementedException();
+                //throw new NotImplementedException();
             }
 
             public void Update(UpdateTypes type)
             {
-                throw new NotImplementedException();
+                //throw new NotImplementedException();
             }
         }
         #endregion
@@ -202,11 +206,38 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
                 public string info;
             }
 
+            StrategyBase _Host;
+            List<LogicBlock> _LogicBlocks;
+
+            public ExecutionEngine(StrategyBase Host, List<LogicBlock> LogicBlocks)
+            {
+                _Host = Host;
+                _LogicBlocks = LogicBlocks;
+                foreach (LogicBlock lb in LogicBlocks)
+                    if (lb.Type != BlockTypes.Execution) throw new ArrayTypeMismatchException();
+            }
+
             public ExecutionProduct Execute(SignalEngine.SignalProduct SP1, RiskEngine.RiskProduct RP1)
             {
-                throw new NotImplementedException();
+                if (SP1.direction == MarketPosition.Flat || RP1.size == 0)
+                {
+                    return new ExecutionProduct { info = "No Signal" };
+                }
+                else if (SP1.direction == MarketPosition.Long)
+                {
+                    _Host.EnterLong(RP1.size, "Long_Aurora");
+                    return new ExecutionProduct { info = $"Entering Long {RP1.size} contracts" };
+                }
+                else if (SP1.direction == MarketPosition.Short)
+                {
+                    _Host.EnterShort(RP1.size, "Short_Aurora");
+                    return new ExecutionProduct { info = $"Entering Short {RP1.size} contracts" };
+                }
+                else
+                {
+                   return new ExecutionProduct { info = "Invalid Signal" };
+                }
             }
         }
         #endregion
     }
-}

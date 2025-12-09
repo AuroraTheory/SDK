@@ -2,6 +2,7 @@ using NinjaTrader.Cbi;
 using NinjaTrader.Core.FloatingPoint;
 using NinjaTrader.Data;
 using NinjaTrader.NinjaScript;
+using NinjaTrader.NinjaScript.Strategies;
 using SharpDX.Win32;
 using System;
 using System.Collections.Generic;
@@ -17,46 +18,69 @@ using System.Xml.Serialization;
 
 namespace NinjaTrader.Custom.AddOns.Aurora.SDK
 {
-    public class AuroraStrategy
+    public abstract class AuroraStrategy : Strategy
     {
-        // this is the top level class for Aurora Strategies,
-        internal StrategyBase _Host;
-
-        internal List<ISeries<double>> _Primaries;
         // TODO: Create a time series data structure to hold external data sources
         // TODO: Then create a dict or list to hold those datastructures to be called by logic blocks
+        #region Base Risk Parameters
+        [NinjaScriptProperty, Range(1, int.MaxValue), Display(Name = "Base Contracts", Order = 1, GroupName = "RE_BASE")]
+        public int Risk_BaseContracts { get; set; }
 
-        public SignalEngine _signalEngine { get; private set; }
-        public RiskEngine _riskEngine { get; private set; }
-        public UpdateEngine _updateEngine { get; private set; }
-        public ExecutionEngine _executionEngine { get; private set; }
+        [NinjaScriptProperty, Range(1, int.MaxValue), Display(Name = "Max Contracts", Order = 2, GroupName = "RE_BASE")]
+        public int Risk_MaxContracts { get; set; }
+        #endregion
 
 
-        public AuroraStrategy(StrategyBase Host, List<LogicBlock> Blocks) // this would be called during DataLoaded
+        private SignalEngine _signalEngine;
+        private RiskEngine _riskEngine;
+        private UpdateEngine _updateEngine;
+        private ExecutionEngine _executionEngine;
+
+        private List<LogicBlock> Blocks;
+
+        public void SetLogicBlocks(List<LogicBlock> blocks)
         {
-            _Host = Host;
-            _Primaries = LoadPrimarySeries();
+            Blocks = blocks;
+        }
 
+        private void SetDefaultsHandler()
+        {
+            Risk_BaseContracts = 10;
+            Risk_MaxContracts = int.MaxValue;
+        }
+
+        private void ConfigureHandler()
+        {
+            // Configuration logic can be added here
+        }
+
+        private void DataLoadedHandler()
+        {
             List<LogicBlock> _sBlocks = ParseLogicBlocks(Blocks, BlockTypes.Signal);
             List<LogicBlock> _rBlocks = ParseLogicBlocks(Blocks, BlockTypes.Risk);
             List<LogicBlock> _uBlocks = ParseLogicBlocks(Blocks, BlockTypes.Update);
-            //List<LogicBlock> _eBlocks = ParseLogicBlocks(Blocks, BlockTypes.Signal);
+            List<LogicBlock> _eBlocks = ParseLogicBlocks(Blocks, BlockTypes.Execution);
 
-            _signalEngine = new(Host, _sBlocks);
-            _riskEngine = new(Host, _rBlocks);
-            _updateEngine = new(Host, _uBlocks);
-            //_executionEngine = new();
+            _signalEngine = new(this, _sBlocks);
+            _riskEngine = new(this, _rBlocks, Risk_BaseContracts);
+            _updateEngine = new(this, _uBlocks);
+            _executionEngine = new(this, _eBlocks);
         }
 
-        public List<ISeries<double>> LoadPrimarySeries()
+        public void OnStateChangedHandler(State state)
         {
-            List<ISeries<double>> primaries = [];
-            primaries.Clear();
-
-            foreach (var barSeries in _Host.BarsArray)
-                _Primaries.Add(barSeries);
-
-            return primaries;
+            switch (state)
+            {
+                case State.SetDefaults:
+                    SetDefaultsHandler();
+                    break;
+                case State.Configure:
+                    ConfigureHandler();
+                    break;
+                case State.DataLoaded:
+                    DataLoadedHandler();
+                    break;
+            }
         }
 
         public List<LogicBlock> ParseLogicBlocks(List<LogicBlock> blocks, BlockTypes type)
@@ -70,10 +94,11 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
             return parsedBlocks;
         }
 
-        public void BarUpdate()
+        protected override void OnBarUpdate()
         {
-            SignalEngine.SignalProduct SGL1 = _signalEngine.Evaluate(); // should we have a global state datastructure?
-            RiskEngine.RiskProduct RSK1 = _riskEngine.Evaluate(SGL1); // TODO: Risk Engine currently does NOT use SignalProduct, need to implement that
+            Print("Aurora OnBarUpdate Triggered");
+            SignalEngine.SignalProduct SGL1 = _signalEngine.Evaluate();
+            RiskEngine.RiskProduct RSK1 = _riskEngine.Evaluate();
 
             _updateEngine.Update(UpdateEngine.UpdateTypes.OnBarUpdate);
             ExecutionEngine.ExecutionProduct EXC1 = _executionEngine.Execute(SGL1, RSK1);
