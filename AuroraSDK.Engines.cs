@@ -78,7 +78,8 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
                             };
                         break;
                     default:
-                        throw new NotImplementedException(); // TODO: implement correct exception
+                        _host.Print($"tf1 {logicOutputs[lb.Id].Type}, {logicOutputs[lb.Id].SubType}");
+                        break;
                 }
             }
 

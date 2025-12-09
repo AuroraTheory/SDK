@@ -30,7 +30,6 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
         public int Risk_MaxContracts { get; set; }
         #endregion
 
-
         private SignalEngine _signalEngine;
         private RiskEngine _riskEngine;
         private UpdateEngine _updateEngine;
@@ -97,6 +96,11 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
         protected override void OnBarUpdate()
         {
             Print("Aurora OnBarUpdate Triggered");
+            if (_signalEngine == null || _riskEngine == null || _updateEngine == null || _executionEngine == null)
+            {
+                Print("Aurora Engines not initialized.");
+                return;
+            }
             SignalEngine.SignalProduct SGL1 = _signalEngine.Evaluate();
             RiskEngine.RiskProduct RSK1 = _riskEngine.Evaluate();
 
