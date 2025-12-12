@@ -85,27 +85,42 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
         public List<LogicBlock> ParseLogicBlocks(List<LogicBlock> blocks, BlockTypes type)
         {
             List<LogicBlock> parsedBlocks = [];
-            foreach (LogicBlock block in blocks)
+            try
             {
-                if (block.Type == type)
-                    parsedBlocks.Add(block);
+                foreach (LogicBlock block in blocks)
+                {
+                    if (block.Type == type)
+                        parsedBlocks.Add(block);
+                }
+            }
+            catch (Exception ex)
+            {
+                Print($"Error parsing logic blocks of type {type}: {ex.Message}");
+                return [];
             }
             return parsedBlocks;
         }
 
         protected override void OnBarUpdate()
         {
-            Print("Aurora OnBarUpdate Triggered");
-            if (_signalEngine == null || _riskEngine == null || _updateEngine == null || _executionEngine == null)
+            try
             {
-                Print("Aurora Engines not initialized.");
-                return;
-            }
-            SignalEngine.SignalProduct SGL1 = _signalEngine.Evaluate();
-            RiskEngine.RiskProduct RSK1 = _riskEngine.Evaluate();
+                Print("Aurora OnBarUpdate Triggered");
+                if (_signalEngine == null || _riskEngine == null || _updateEngine == null || _executionEngine == null)
+                {
+                    Print("Aurora Engines not initialized.");
+                    return;
+                }
+                SignalEngine.SignalProduct SGL1 = _signalEngine.Evaluate();
+                RiskEngine.RiskProduct RSK1 = _riskEngine.Evaluate();
 
-            _updateEngine.Update(UpdateEngine.UpdateTypes.OnBarUpdate);
-            ExecutionEngine.ExecutionProduct EXC1 = _executionEngine.Execute(SGL1, RSK1);
+                _updateEngine.Update(UpdateEngine.UpdateTypes.OnBarUpdate);
+                ExecutionEngine.ExecutionProduct EXC1 = _executionEngine.Execute(SGL1, RSK1);
+            }
+            catch (Exception ex)
+            {
+                Print($"Error in OnBarUpdate: {ex.Message}");
+            }
         }
     }
 }
