@@ -18,17 +18,12 @@ using System.Xml.Serialization;
 
 namespace NinjaTrader.Custom.AddOns.Aurora.SDK
 {
-    public abstract class AuroraStrategy : Strategy
+    public abstract partial class AuroraStrategy : Strategy
     {
         // TODO: Create a time series data structure to hold external data sources
         // TODO: Then create a dict or list to hold those datastructures to be called by logic blocks
-        #region Base Risk Parameters
-        [NinjaScriptProperty, Range(1, int.MaxValue), Display(Name = "Base Contracts", Order = 1, GroupName = "RE_BASE")]
-        public int Risk_BaseContracts { get; set; }
-
-        [NinjaScriptProperty, Range(1, int.MaxValue), Display(Name = "Max Contracts", Order = 2, GroupName = "RE_BASE")]
-        public int Risk_MaxContracts { get; set; }
-        #endregion
+        [NinjaScriptProperty, Display(Name = "DEBUG MODE", GroupName = "Dev Tools")]
+        public bool DEBUG { get; set; } = false;
 
         private SignalEngine _signalEngine;
         private RiskEngine _riskEngine;
@@ -37,15 +32,30 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
 
         private List<LogicBlock> Blocks;
 
-        public void SetLogicBlocks(List<LogicBlock> blocks)
+        internal enum LogMode
         {
-            Blocks = blocks;
+            Log,
+            Print,
+            Debug
+        }
+
+        internal void ATDebug(string message, LogMode mode, LogLevel level = LogLevel.Information)
+        {
+            // Logging at a high frequency causes performance hits
+            switch (mode)
+            {
+                case LogMode.Log:
+                    Log(message, level); break;
+                case LogMode.Print:
+                    Print(message); break;
+                case LogMode.Debug:
+                    if (DEBUG) Print(message); break;
+            }
         }
 
         private void SetDefaultsHandler()
         {
-            Risk_BaseContracts = 10;
-            Risk_MaxContracts = int.MaxValue;
+
         }
 
         private void ConfigureHandler()
@@ -61,7 +71,7 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
             List<LogicBlock> _eBlocks = ParseLogicBlocks(Blocks, BlockTypes.Execution);
 
             _signalEngine = new(this, _sBlocks);
-            _riskEngine = new(this, _rBlocks, Risk_BaseContracts);
+            _riskEngine = new(this, _rBlocks);
             _updateEngine = new(this, _uBlocks);
             _executionEngine = new(this, _eBlocks);
         }
@@ -105,12 +115,17 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
         {
             try
             {
-                Print("Aurora OnBarUpdate Triggered");
+                ATDebug("OnBarUpdate: Triggered", LogMode.Debug);
+                /*
+                
+                Too Lazy to finish the fancy debug log shit rn
+
                 if (_signalEngine == null || _riskEngine == null || _updateEngine == null || _executionEngine == null)
                 {
-                    Print("Aurora Engines not initialized.");
+                    ATDebug("OnBarUpdate: Failed to ")
                     return;
                 }
+                */
                 SignalEngine.SignalProduct SGL1 = _signalEngine.Evaluate();
                 RiskEngine.RiskProduct RSK1 = _riskEngine.Evaluate();
 

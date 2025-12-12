@@ -16,214 +16,214 @@ using System.Text;
 using System.Threading;
 using System.Windows.Controls;
 using System.Windows.Media;
-using static NinjaTrader.Custom.AddOns.Aurora.SDK.SignalEngine;
-using static NinjaTrader.Custom.AddOns.Aurora.SDK.RiskEngine;
-using static NinjaTrader.Custom.AddOns.Aurora.SDK.UpdateEngine;
-using static NinjaTrader.Custom.AddOns.Aurora.SDK.ExecutionEngine;
+using NinjaTrader.NinjaScript.Strategies;
 #endregion
 
 
 namespace NinjaTrader.Custom.AddOns.Aurora.SDK
 {
-    #region Signal Engine
-    public class SignalEngine
+    public abstract partial class AuroraStrategy : Strategy
     {
-        // the purpose of the signal engine is to loop through signal logic blocks to spit out either Long Short or Neutral.
-        // the challenge comes when summarizing the outputs of the logic block
-
-        public struct SignalProduct
+        #region Signal Engine
+        public class SignalEngine
         {
-            public OrderType orderType;
-            public MarketPosition direction;
-            public string Name;
-        }
+            // the purpose of the signal engine is to loop through signal logic blocks to spit out either Long Short or Neutral.
+            // the challenge comes when summarizing the outputs of the logic block
 
-        private StrategyBase _host;
-        private List<LogicBlock> _logicblocks;
+            public struct SignalProduct
+            {
+                public OrderType orderType;
+                public MarketPosition direction;
+                public string Name;
+            }
 
-        public SignalEngine(StrategyBase Host, List<LogicBlock> LogicBlocks)
-        {
-            _host = Host;
+            private StrategyBase _host;
+            private List<LogicBlock> _logicblocks;
 
-            foreach (LogicBlock lb in LogicBlocks)
-                if (lb.Type != BlockTypes.Signal) throw new ArrayTypeMismatchException();
+            public SignalEngine(StrategyBase Host, List<LogicBlock> LogicBlocks)
+            {
+                _host = Host;
 
-            _logicblocks = [.. LogicBlocks];
-        }
-        
-        public SignalProduct Evaluate()
-        {
-            _host.Print("Signal Engine: Step Start");
-            SignalProduct SP = new();
-            Dictionary<int, LogicTicket> logicOutputs = [];
-            int biasCount = 0;
-            _host.Print("Signal Engine: Product Initialization Complete");
-            try
-            { 
-                _host.Print("Signal Engine: Logic Loop Start");
-                if (_logicblocks is not null && _logicblocks.Count != 0)
-                foreach (LogicBlock lb in _logicblocks)
+                foreach (LogicBlock lb in LogicBlocks)
+                    if (lb.Type != BlockTypes.Signal) throw new ArrayTypeMismatchException();
+
+                _logicblocks = [.. LogicBlocks];
+            }
+
+            public SignalProduct Evaluate()
+            {
+                SignalProduct SP = new();
+                Dictionary<int, LogicTicket> logicOutputs = [];
+                int biasCount = 0;
+                _host.Print("Signal Engine: Product Initialization Complete");
+                try
                 {
-                    logicOutputs[lb.Id] = lb.Forward();
-                    _host.Print($"Signal Engine: Logic Block {lb.Id} Output: Type:{logicOutputs[lb.Id].Type}, SubType:{logicOutputs[lb.Id].SubType}, Value:{logicOutputs[lb.Id].Value}");
-                    switch (logicOutputs[lb.Id].SubType)
+                    _host.Print("Signal Engine: Logic Loop Start");
+                    if (_logicblocks is not null && _logicblocks.Count != 0)
+                        foreach (LogicBlock lb in _logicblocks)
+                        {
+                            logicOutputs[lb.Id] = lb.Forward();
+                            _host.Print($"Signal Engine: Logic Block {lb.Id} Output: Type:{lb.Type}, SubType:{lb.SubType}, Value:{logicOutputs[lb.Id].Value}");
+                            switch (lb.SubType)
+                            {
+                                case BlockSubTypes.Bias:
+                                    if (logicOutputs[lb.Id].Value is not null && (bool)logicOutputs[lb.Id].Value is true)
+                                        biasCount++;
+                                    else
+                                        biasCount--;
+                                    break;
+                                case BlockSubTypes.Filter:
+                                    if (logicOutputs[lb.Id].Value is not null && (bool)logicOutputs[lb.Id].Value is false)
+                                        return new SignalProduct
+                                        {
+                                            orderType = OrderType.Market,
+                                            direction = MarketPosition.Flat,
+                                            Name = "Filtered"
+                                        };
+                                    break;
+                                default:
+                                    _host.Print($"tf1");
+                                    break;
+                            }
+                        }
+                    _host.Print("Signal Engine: Logic Loop End");
+
+                    if (biasCount > 0)
                     {
-                        case BlockSubTypes.Bias:
-                            if (logicOutputs[lb.Id].Value is not null && (bool)logicOutputs[lb.Id].Value is true)
-                                biasCount++;
-                            else
-                                biasCount--;
-                            break;
-                        case BlockSubTypes.Filter:
-                            if (logicOutputs[lb.Id].Value is not null && (bool)logicOutputs[lb.Id].Value is false)
-                                return new SignalProduct
-                                {
-                                    orderType = OrderType.Market,
-                                    direction = MarketPosition.Flat,
-                                    Name = "Filtered"
-                                };
-                            break;
-                        default:
-                            _host.Print($"tf1");
-                            break;
+                        SP.direction = MarketPosition.Long;
+                        SP.orderType = OrderType.Market;
+                        SP.Name = "Long Bias";
                     }
-                }
-                _host.Print("Signal Engine: Logic Loop End");
-
-                if (biasCount > 0)
-                {
-                    SP.direction = MarketPosition.Long;
-                    SP.orderType = OrderType.Market;
-                    SP.Name = "Long Bias";
-                }
-                else if (biasCount < 0)
-                {
-                    SP.direction = MarketPosition.Short;
-                    SP.orderType = OrderType.Market;
-                    SP.Name = "Short Bias";
-                }
-                else
-                {
-                    SP.direction = MarketPosition.Flat;
-                    SP.orderType = OrderType.Market;
-                    SP.Name = "Neutral Bias";
-                }
-                _host.Print($"Signal Engine: direction:{SP.direction}");
-
-            }
-            catch (Exception ex)
-            {
-                _host.Print($"Error in Signal Engine Evaluate: {ex.Message}");
-                return new SignalProduct
-                {
-                    orderType = OrderType.Market,
-                    direction = MarketPosition.Flat,
-                    Name = "Error"
-                };
-            }
-            return SP;
-        }
-    }
-    #endregion
-
-    #region Risk Engine
-    public class RiskEngine
-    {
-        public struct RiskProduct
-        {
-            public int size;
-            public string name;
-            public Dictionary<string, object> miscValues;
-        }
-
-        private StrategyBase _host;
-        private List<LogicBlock> _logicblocks;
-        int BaseContracts { get; set; } = 1;
-
-        public RiskEngine(StrategyBase Host, List<LogicBlock> LogicBlocks, int BaseCons)
-        {
-            _host = Host;
-            BaseContracts = BaseCons;
-            // TODO: clean the list of logic blocks to make sure they are all the valid type of logic block
-
-            foreach (LogicBlock lb in LogicBlocks)
-                if (lb.Type != BlockTypes.Risk) throw new ArrayTypeMismatchException();
-
-            _logicblocks = [.. LogicBlocks];
-        }
-
-        public RiskProduct Evaluate()
-        {
-            _host.Print("Risk Engine: Step Start");
-            var rp = new RiskProduct
-            {
-                size = 0,
-                name = string.Empty,
-                miscValues = new Dictionary<string, object>()
-            };
-            var logicOutputs = new Dictionary<int, LogicTicket>();
-            double multiplier = 1.0;
-            int contractLimit = int.MaxValue;
-            _host.Print("Risk Engine: Product Initialization Complete");
-            try
-            {
-                _host.Print("Risk Engine: Logic Loop Start");
-                foreach (var lb in _logicblocks)
-                {
-                    var output = lb.Forward();
-                    logicOutputs[lb.Id] = output;
-
-                    switch (output.SubType)
+                    else if (biasCount < 0)
                     {
-                        case BlockSubTypes.Multiplier:
-                            // best-effort cast; will throw if the underlying value isn't convertible
-                            multiplier *= (double)output.Value;
-                            break;
-
-                        case BlockSubTypes.Limit:
-                            contractLimit = Math.Min(contractLimit, (int)output.Value);
-                            break;
-
-                        default:
-                            throw new NotSupportedException($"Unsupported block subtype: {output.SubType}");
+                        SP.direction = MarketPosition.Short;
+                        SP.orderType = OrderType.Market;
+                        SP.Name = "Short Bias";
                     }
+                    else
+                    {
+                        SP.direction = MarketPosition.Flat;
+                        SP.orderType = OrderType.Market;
+                        SP.Name = "Neutral Bias";
+                    }
+                    _host.Print($"Signal Engine: direction:{SP.direction}");
+
                 }
-                _host.Print("Risk Engine: Step End");
-
-                _host.Print($"Risk Engine: BaseContracts={BaseContracts}, Multiplier={multiplier}, ContractLimit={contractLimit}");
-
-                // Multiply base contracts by multiplier before rounding
-                int contracts = (int)Math.Round(BaseContracts * multiplier);
-
-                if (contracts > contractLimit)
-                    contracts = contractLimit;
-
-                if (contracts < 0)
-                    contracts = 0;
-
-                rp.size = contracts;
-
-                _host.Print($"Risk Engine: Final Contract Size={rp.size}");
+                catch (Exception ex)
+                {
+                    _host.Print($"Error in Signal Engine Evaluate: {ex.Message}");
+                    return new SignalProduct
+                    {
+                        orderType = OrderType.Market,
+                        direction = MarketPosition.Flat,
+                        Name = "Error"
+                    };
+                }
+                return SP;
             }
-            catch (Exception ex)
+        }
+        #endregion
+
+        #region Risk Engine
+        public class RiskEngine
+        {
+            public struct RiskProduct
             {
-                _host.Print($"Error in Risk Engine Evaluate: {ex.Message}");
-                return new RiskProduct
+                public int size;
+                public string name;
+                public Dictionary<string, object> miscValues;
+            }
+
+            private StrategyBase _host;
+            private List<LogicBlock> _logicblocks;
+            int BaseContracts { get; set; } = 1;
+
+            public RiskEngine(StrategyBase Host, List<LogicBlock> LogicBlocks)
+            {
+                _host = Host;
+                BaseContracts = 10; // TODO: THIS NEEDS TO BE FIXED, CANT BE STATIC.
+                                    // FIX IT DURING THE CONFIG FILE BRANCH
+
+                // TODO: clean the list of logic blocks to make sure they are all the valid type of logic block
+
+                foreach (LogicBlock lb in LogicBlocks)
+                    if (lb.Type != BlockTypes.Risk) throw new ArrayTypeMismatchException();
+
+                _logicblocks = [.. LogicBlocks];
+            }
+
+            public RiskProduct Evaluate()
+            {
+                _host.Print("Risk Engine: Step Start");
+                var rp = new RiskProduct
                 {
                     size = 0,
-                    name = "Error",
+                    name = string.Empty,
                     miscValues = new Dictionary<string, object>()
                 };
+                var logicOutputs = new Dictionary<int, LogicTicket>();
+                double multiplier = 1.0;
+                int contractLimit = int.MaxValue;
+                _host.Print("Risk Engine: Product Initialization Complete");
+                try
+                {
+                    _host.Print("Risk Engine: Logic Loop Start");
+                    foreach (var lb in _logicblocks)
+                    {
+                        var output = lb.Forward();
+                        logicOutputs[lb.Id] = output;
+
+                        switch (lb.SubType)
+                        {
+                            case BlockSubTypes.Multiplier:
+                                // best-effort cast; will throw if the underlying value isn't convertible
+                                multiplier *= (double)output.Value;
+                                break;
+
+                            case BlockSubTypes.Limit:
+                                contractLimit = Math.Min(contractLimit, (int)output.Value);
+                                break;
+
+                            default:
+                                throw new NotSupportedException($"Unsupported block subtype: {lb.SubType}");
+                        }
+                    }
+                    _host.Print("Risk Engine: Step End");
+
+                    _host.Print($"Risk Engine: BaseContracts={BaseContracts}, Multiplier={multiplier}, ContractLimit={contractLimit}");
+
+                    // Multiply base contracts by multiplier before rounding
+                    int contracts = (int)Math.Round(BaseContracts * multiplier);
+
+                    if (contracts > contractLimit)
+                        contracts = contractLimit;
+
+                    if (contracts < 0)
+                        contracts = 0;
+
+                    rp.size = contracts;
+
+                    _host.Print($"Risk Engine: Final Contract Size={rp.size}");
+                }
+                catch (Exception ex)
+                {
+                    _host.Print($"Error in Risk Engine Evaluate: {ex.Message}");
+                    return new RiskProduct
+                    {
+                        size = 0,
+                        name = "Error",
+                        miscValues = new Dictionary<string, object>()
+                    };
+                }
+                return rp;
             }
-            return rp;
         }
-    }
 
-    #endregion
+        #endregion
 
-    #region Update Engine
-    public class UpdateEngine
-    {
+        #region Update Engine
+        public class UpdateEngine
+        {
             // update engine will have multiple methods to be called from the strategy core methods
             public enum UpdateTypes
             {
@@ -264,35 +264,36 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
                     if (lb.Type != BlockTypes.Execution) throw new ArrayTypeMismatchException();
             }
 
-        public ExecutionProduct Execute(SignalEngine.SignalProduct SP1, RiskEngine.RiskProduct RP1)
-        {
-            try
+            public ExecutionProduct Execute(SignalEngine.SignalProduct SP1, RiskEngine.RiskProduct RP1)
             {
-                if (SP1.direction == MarketPosition.Flat || RP1.size == 0)
+                try
                 {
-                    return new ExecutionProduct { info = "No Signal" };
+                    if (SP1.direction == MarketPosition.Flat || RP1.size == 0)
+                    {
+                        return new ExecutionProduct { info = "No Signal" };
+                    }
+                    else if (SP1.direction == MarketPosition.Long)
+                    {
+                        _Host.EnterLong(RP1.size, "Long_Aurora");
+                        return new ExecutionProduct { info = $"Entering Long {RP1.size} contracts" };
+                    }
+                    else if (SP1.direction == MarketPosition.Short)
+                    {
+                        _Host.EnterShort(RP1.size, "Short_Aurora");
+                        return new ExecutionProduct { info = $"Entering Short {RP1.size} contracts" };
+                    }
+                    else
+                    {
+                        return new ExecutionProduct { info = "Invalid Signal" };
+                    }
                 }
-                else if (SP1.direction == MarketPosition.Long)
+                catch (Exception ex)
                 {
-                    _Host.EnterLong(RP1.size, "Long_Aurora");
-                    return new ExecutionProduct { info = $"Entering Long {RP1.size} contracts" };
-                }
-                else if (SP1.direction == MarketPosition.Short)
-                {
-                    _Host.EnterShort(RP1.size, "Short_Aurora");
-                    return new ExecutionProduct { info = $"Entering Short {RP1.size} contracts" };
-                }
-                else
-                {
-                    return new ExecutionProduct { info = "Invalid Signal" };
+                    _Host.Print($"Error in Execution Engine Execute: {ex.Message}");
+                    return new ExecutionProduct { info = "Error" };
                 }
             }
-            catch (Exception ex)
-            {
-                _Host.Print($"Error in Execution Engine Execute: {ex.Message}");
-                return new ExecutionProduct { info = "Error" };
-            }
-        }
         }
         #endregion
     }
+}
