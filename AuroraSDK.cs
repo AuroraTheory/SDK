@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -15,6 +16,8 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Xml.Serialization;
+using YamlDotNet.Serialization;
+using YamlDotNet.Serialization.NamingConventions;
 
 namespace NinjaTrader.Custom.AddOns.Aurora.SDK
 {
@@ -22,8 +25,12 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
     {
         // TODO: Create a time series data structure to hold external data sources
         // TODO: Then create a dict or list to hold those datastructures to be called by logic blocks
-        [NinjaScriptProperty, Display(Name = "DEBUG MODE", GroupName = "Dev Tools")]
+        [NinjaScriptProperty, Display(Name = "DEBUG MODE", GroupName = "Aurora Settings")]
         public bool DEBUG { get; set; } = false;
+
+        [NinjaScriptProperty, Display(Name = "CONFIG FILE", GroupName = "Aurora Settings")]
+        public string CFGPATH { get; set; } = "";
+
 
         private SignalEngine _signalEngine;
         private RiskEngine _riskEngine;
@@ -37,6 +44,28 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
             Log,
             Print,
             Debug
+        }
+
+        public List<LogicBlock> ParseConfigFile(string filePath)
+        {
+            AlgoConfig algoConfig = new();
+            LogicBlockFactory blockFactory = new();
+            List<LogicBlock> lbs = new();
+            try
+            {
+                algoConfig = YamlRawLoader.Load(filePath);
+                foreach (LogicBlockConfig lbc in algoConfig.Logic)
+                {
+                    LogicBlock lb = blockFactory.Create(lbc.BID, this, lbc.BParameters);
+                    lbs.Add(lb);
+                }
+            }
+            catch (Exception ex)
+            {
+                lbs = [];
+                this.ATDebug($"Exception in ParseConfigFile {ex.Message}");
+            }
+            return lbs;
         }
 
         public void ATDebug(string message, LogMode mode = LogMode.Log, LogLevel level = LogLevel.Information)
@@ -54,18 +83,19 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
             }
         }
 
-        public void SetDefaultsHandler()
+        internal void SetDefaultsHandler()
         {
 
         }
 
-        public void ConfigureHandler()
+        internal void ConfigureHandler()
         {
             // Configuration logic can be added here
         }
 
-        public void DataLoadedHandler()
+        internal void DataLoadedHandler()
         {
+            List<LogicBlock> _aBlocks = ParseConfigFile(CFGPATH);
             List<LogicBlock> _sBlocks = ParseLogicBlocks(Blocks, BlockTypes.Signal);
             List<LogicBlock> _rBlocks = ParseLogicBlocks(Blocks, BlockTypes.Risk);
             List<LogicBlock> _uBlocks = ParseLogicBlocks(Blocks, BlockTypes.Update);
@@ -118,7 +148,6 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
             {
                 ATDebug("OnBarUpdate: Triggered", LogMode.Debug);
                 /*
-                
                 Too Lazy to finish the fancy debug log shit rn
 
                 if (_signalEngine == null || _riskEngine == null || _updateEngine == null || _executionEngine == null)
