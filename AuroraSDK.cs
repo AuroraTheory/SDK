@@ -71,8 +71,8 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
             List<LogicBlock> _uBlocks = ParseLogicBlocks(Blocks, BlockTypes.Update);
             List<LogicBlock> _eBlocks = ParseLogicBlocks(Blocks, BlockTypes.Execution);
 
-            _signalEngine = new(this, _sBlocks);
-            _riskEngine = new(this, _rBlocks);
+            _signalEngine = new(this, this, _sBlocks);
+            _riskEngine = new(this, this, _rBlocks);
             _updateEngine = new(this, _uBlocks);
             _executionEngine = new(this, _eBlocks);
         }

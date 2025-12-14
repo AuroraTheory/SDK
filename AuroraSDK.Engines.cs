@@ -28,9 +28,10 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
             private AuroraStrategy _strategy;
             private List<LogicBlock> _logicblocks;
 
-            public SignalEngine(StrategyBase Host, List<LogicBlock> LogicBlocks)
+            public SignalEngine(StrategyBase Host, AuroraStrategy Strategy, List<LogicBlock> LogicBlocks)
             {
                 _host = Host;
+                _strategy = Strategy;
 
                 foreach (LogicBlock lb in LogicBlocks)
                     if (lb.Type != BlockTypes.Signal) throw new ArrayTypeMismatchException();
