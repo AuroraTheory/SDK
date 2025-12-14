@@ -1,22 +1,9 @@
 #region Definitions
 using NinjaTrader.Cbi;
-using NinjaTrader.CQG.ProtoBuf;
 using NinjaTrader.NinjaScript;
-using NinjaTrader.NinjaScript.DrawingTools;
-using NinjaTrader.NinjaScript.Indicators;
+using NinjaTrader.NinjaScript.Strategies;
 using System;
 using System.Collections.Generic;
-using System.ComponentModel.DataAnnotations;
-using System.Diagnostics;
-using System.Drawing;
-using System.IO;
-using System.IO.Pipes;
-using System.Linq;
-using System.Text;
-using System.Threading;
-using System.Windows.Controls;
-using System.Windows.Media;
-using NinjaTrader.NinjaScript.Strategies;
 #endregion
 
 
@@ -38,6 +25,7 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
             }
 
             private StrategyBase _host;
+            private AuroraStrategy _strategy;
             private List<LogicBlock> _logicblocks;
 
             public SignalEngine(StrategyBase Host, List<LogicBlock> LogicBlocks)
@@ -55,15 +43,15 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
                 SignalProduct SP = new();
                 Dictionary<int, LogicTicket> logicOutputs = [];
                 int biasCount = 0;
-                _host.Print("Signal Engine: Product Initialization Complete");
+                _strategy.ATDebug("Signal Engine: Product Initialization Complete");
                 try
                 {
-                    _host.Print("Signal Engine: Logic Loop Start");
+                    _strategy.ATDebug("Signal Engine: Logic Loop Start");
                     if (_logicblocks is not null && _logicblocks.Count != 0)
+                        // should we do a forloop to eval and then a forloop to aggregate?
                         foreach (LogicBlock lb in _logicblocks)
                         {
                             logicOutputs[lb.Id] = lb.Forward();
-                            _host.Print($"Signal Engine: Logic Block {lb.Id} Output: Type:{lb.Type}, SubType:{lb.SubType}, Value:{logicOutputs[lb.Id].Value}");
                             switch (lb.SubType)
                             {
                                 case BlockSubTypes.Bias:
@@ -82,11 +70,11 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
                                         };
                                     break;
                                 default:
-                                    _host.Print($"tf1");
+                                    _strategy.ATDebug($"tf1");
                                     break;
                             }
                         }
-                    _host.Print("Signal Engine: Logic Loop End");
+                    _strategy.ATDebug("Signal Engine: Logic Loop End");
 
                     if (biasCount > 0)
                     {
@@ -106,12 +94,11 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
                         SP.orderType = OrderType.Market;
                         SP.Name = "Neutral Bias";
                     }
-                    _host.Print($"Signal Engine: direction:{SP.direction}");
-
+                    _strategy.ATDebug($"Signal Engine: direction:{SP.direction}");
                 }
                 catch (Exception ex)
                 {
-                    _host.Print($"Error in Signal Engine Evaluate: {ex.Message}");
+                    _strategy.ATDebug($"Signal Engine: Exception: {ex.Message}");
                     return new SignalProduct
                     {
                         orderType = OrderType.Market,
@@ -135,12 +122,14 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
             }
 
             private StrategyBase _host;
+            private AuroraStrategy _strategy;
             private List<LogicBlock> _logicblocks;
             int BaseContracts { get; set; } = 1;
 
-            public RiskEngine(StrategyBase Host, List<LogicBlock> LogicBlocks)
+            public RiskEngine(StrategyBase Host, AuroraStrategy Strategy, List<LogicBlock> LogicBlocks)
             {
                 _host = Host;
+                _strategy = Strategy;
                 BaseContracts = 10; // TODO: THIS NEEDS TO BE FIXED, CANT BE STATIC.
                                     // FIX IT DURING THE CONFIG FILE BRANCH
 
@@ -154,7 +143,7 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
 
             public RiskProduct Evaluate()
             {
-                _host.Print("Risk Engine: Step Start");
+                _strategy.ATDebug("Risk Engine: Step Start");
                 var rp = new RiskProduct
                 {
                     size = 0,
@@ -164,10 +153,10 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
                 var logicOutputs = new Dictionary<int, LogicTicket>();
                 double multiplier = 1.0;
                 int contractLimit = int.MaxValue;
-                _host.Print("Risk Engine: Product Initialization Complete");
+                _strategy.ATDebug("Risk Engine: Product Initialization Complete");
                 try
                 {
-                    _host.Print("Risk Engine: Logic Loop Start");
+                    _strategy.ATDebug("Risk Engine: Logic Loop Start");
                     foreach (var lb in _logicblocks)
                     {
                         var output = lb.Forward();
@@ -188,9 +177,9 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
                                 throw new NotSupportedException($"Unsupported block subtype: {lb.SubType}");
                         }
                     }
-                    _host.Print("Risk Engine: Step End");
+                    _strategy.ATDebug("Risk Engine: Step End");
 
-                    _host.Print($"Risk Engine: BaseContracts={BaseContracts}, Multiplier={multiplier}, ContractLimit={contractLimit}");
+                    _strategy.ATDebug($"Risk Engine: BaseContracts={BaseContracts}, Multiplier={multiplier}, ContractLimit={contractLimit}");
 
                     // Multiply base contracts by multiplier before rounding
                     int contracts = (int)Math.Round(BaseContracts * multiplier);
@@ -203,11 +192,11 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
 
                     rp.size = contracts;
 
-                    _host.Print($"Risk Engine: Final Contract Size={rp.size}");
+                    _strategy.ATDebug($"Risk Engine: Final Contract Size={rp.size}");
                 }
                 catch (Exception ex)
                 {
-                    _host.Print($"Error in Risk Engine Evaluate: {ex.Message}");
+                    _strategy.ATDebug($"Error in Risk Engine Evaluate: {ex.Message}");
                     return new RiskProduct
                     {
                         size = 0,

@@ -32,15 +32,16 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
 
         private List<LogicBlock> Blocks;
 
-        internal enum LogMode
+        public enum LogMode
         {
             Log,
             Print,
             Debug
         }
 
-        internal void ATDebug(string message, LogMode mode, LogLevel level = LogLevel.Information)
+        public void ATDebug(string message, LogMode mode = LogMode.Log, LogLevel level = LogLevel.Information)
         {
+            // This is a really simple implementation, make it better in the future
             // Logging at a high frequency causes performance hits
             switch (mode)
             {
@@ -53,17 +54,17 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
             }
         }
 
-        private void SetDefaultsHandler()
+        public void SetDefaultsHandler()
         {
 
         }
 
-        private void ConfigureHandler()
+        public void ConfigureHandler()
         {
             // Configuration logic can be added here
         }
 
-        private void DataLoadedHandler()
+        public void DataLoadedHandler()
         {
             List<LogicBlock> _sBlocks = ParseLogicBlocks(Blocks, BlockTypes.Signal);
             List<LogicBlock> _rBlocks = ParseLogicBlocks(Blocks, BlockTypes.Risk);
