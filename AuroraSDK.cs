@@ -37,6 +37,10 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
         private UpdateEngine _updateEngine;
         private ExecutionEngine _executionEngine;
 
+        private List<LogicBlock> _logicBlocks;
+
+        internal Dictionary<string, object> keyValuePairs = [];
+
         public enum LogMode
         {
             Log,
@@ -122,20 +126,29 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
 
         internal void DataLoadedHandler()
         {
-            Register();
+            try
+            {
+                Register();
 
-            List<LogicBlock> _aBlocks = ParseConfigFile(CFGPATH);
-            List<LogicBlock> _sBlocks = SortLogicBlocks(_aBlocks, BlockTypes.Signal);
-            List<LogicBlock> _rBlocks = SortLogicBlocks(_aBlocks, BlockTypes.Risk);
-            List<LogicBlock> _uBlocks = SortLogicBlocks(_aBlocks, BlockTypes.Update);
-            List<LogicBlock> _eBlocks = SortLogicBlocks(_aBlocks, BlockTypes.Execution);
-            ATDebug("ALL BLOCKS SORTED", LogMode.Log, LogLevel.Information);
+                List<LogicBlock> _aBlocks = ParseConfigFile(CFGPATH);
+                _logicBlocks = _aBlocks;
+                List<LogicBlock> _sBlocks = SortLogicBlocks(_aBlocks, BlockTypes.Signal);
+                List<LogicBlock> _rBlocks = SortLogicBlocks(_aBlocks, BlockTypes.Risk);
+                List<LogicBlock> _uBlocks = SortLogicBlocks(_aBlocks, BlockTypes.Update);
+                List<LogicBlock> _eBlocks = SortLogicBlocks(_aBlocks, BlockTypes.Execution);
+                ATDebug("ALL BLOCKS SORTED", LogMode.Log, LogLevel.Information);
 
-            _signalEngine = new(this, _sBlocks);
-            _riskEngine = new(this, this, _rBlocks);
-            _updateEngine = new(this, _uBlocks);
-            _executionEngine = new(this);
-            ATDebug("ALL ENGINES INITIALIZED", LogMode.Log, LogLevel.Information);
+                _signalEngine = new(this, _sBlocks);
+                _riskEngine = new(this, this, _rBlocks);
+                _updateEngine = new(this, _uBlocks);
+                _executionEngine = new(this);
+                ATDebug("ALL ENGINES INITIALIZED", LogMode.Log, LogLevel.Information);
+            }
+            catch (Exception ex)
+            {
+                ATDebug($"Exception in DataLoadedHandler: {ex.Message}, {ex.StackTrace}", LogMode.Log, LogLevel.Error);
+                throw;
+            }
 
             ATDebug("AURORA STRATEGY INIT COMPLETE", LogMode.Log, LogLevel.Information);
         }

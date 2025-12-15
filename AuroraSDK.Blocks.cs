@@ -35,6 +35,7 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
 
         public enum BlockSubTypes
         {
+            Signal,
             Bias,
             Filter,
             Regime, // Future implementation, just an idea for now
@@ -45,7 +46,7 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
 
         public struct BlockConfig
         {
-            public int BlockId;
+            public string BlockId;
             public List<int> DataIds; // wtf is this used for
             public BlockTypes BlockType;
             public Type TicketDataType;
@@ -56,7 +57,7 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
         public struct LogicTicket
         {
             public int TicketId;
-            public int BlockId;
+            public string BlockId;
             public Type DataType;
             public List<object> Values;
         }
@@ -67,7 +68,7 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
             public Dictionary<string, object> Parameters { get; private set; }
             public List<int> DataIds { get; private set; }
             public Type TicketDataType { get; private set; }
-            public int Id { get; private set; }
+            public string Id { get; private set; }
             public BlockTypes Type { get; private set; }
             public BlockSubTypes SubType { get; private set; }
 

@@ -4,6 +4,7 @@ using NinjaTrader.NinjaScript;
 using NinjaTrader.NinjaScript.Strategies;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 #endregion
 
 namespace NinjaTrader.Custom.Strategies.Aurora.SDK
@@ -32,7 +33,7 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
 
                 foreach (LogicBlock lb in LogicBlocks)
                 {
-                    if (lb.Type != BlockTypes.Signal || (lb.SubType != BlockSubTypes.Bias && lb.SubType != BlockSubTypes.Filter)) throw new ArrayTypeMismatchException();
+                    if (lb.Type != BlockTypes.Signal || (lb.SubType != BlockSubTypes.Bias && lb.SubType != BlockSubTypes.Filter && lb.SubType != BlockSubTypes.Signal)) throw new ArrayTypeMismatchException();
                 }
 
 
@@ -44,31 +45,40 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
                 SignalProduct SP = new();
                 Dictionary<int, LogicTicket> logicOutputs = [];
                 int biasCount = 0;
+                int signal = 0;
                 try
                 {
-                    if (_logicblocks is not null && _logicblocks.Count != 0)
+                    if (_logicblocks != null && _logicblocks.Count != 0)
                     {
                         foreach (LogicBlock lb in _logicblocks)
                         {
                             LogicTicket lt1 = lb.Forward();
                             switch (lb.SubType)
                             {
+                                case BlockSubTypes.Signal:
+                                    if (lt1.Values != null)
+                                        signal = (int)lt1.Values[0];
+                                    break;
                                 case BlockSubTypes.Bias:
-                                    if (lt1.Values[0] is not null)
+                                    if (lt1.Values[0] != null)
                                         if ((int)lt1.Values[0] == 1)
                                             biasCount++;
                                         else if ((int)lt1.Values[0] == -1)
                                             biasCount--;
                                     break;
                                 case BlockSubTypes.Filter:
-                                    if (lt1.Values[0] is not null)
-                                        if ((bool)lt1.Values[0] is false)
-                                            SP = new SignalProduct
+                                    if (lt1.Values[0] != null)
+                                    {
+                                        if ((bool)lt1.Values[0] == true)
+                                        {
+                                            return new SignalProduct
                                             {
                                                 orderType = OrderType.Market,
                                                 direction = MarketPosition.Flat,
                                                 Name = "Filtered"
                                             };
+                                        }
+                                    }
                                     break;
                                 default:
                                     _host.ATDebug($"tf1");
@@ -79,19 +89,19 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
                     else
                         _host.ATDebug("Null Logic Blocks", LogMode.Debug);
 
-                    if (biasCount > 0)
+                    if (biasCount >= 1 && signal == 1)
                     {
                         SP.direction = MarketPosition.Long;
                         SP.orderType = OrderType.Market;
                         SP.Name = "Long Bias";
                     }
-                    else if (biasCount < 0)
+                    else if (biasCount <= -1 && signal == -1)
                     {
                         SP.direction = MarketPosition.Short;
                         SP.orderType = OrderType.Market;
                         SP.Name = "Short Bias";
                     }
-                    else
+                    else if (signal == 0 || biasCount == 0)
                     {
                         SP.direction = MarketPosition.Flat;
                         SP.orderType = OrderType.Market;
@@ -148,7 +158,7 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
                     name = string.Empty,
                     miscValues = []
                 };
-                var logicOutputs = new Dictionary<int, LogicTicket>();
+                var logicOutputs = new Dictionary<string, LogicTicket>();
                 double multiplier = 1.0;
                 int contractLimit = int.MaxValue;
                 try
@@ -161,22 +171,22 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
                             logicOutputs[lb.Id] = output;
 
                             if (output.Values.Count != 0)
-                            switch (lb.SubType)
-                            {
-                                case BlockSubTypes.Multiplier:
-                                    multiplier *= (double)output.Values[0];
-                                    break;
+                                switch (lb.SubType)
+                                {
+                                    case BlockSubTypes.Multiplier:
+                                        multiplier *= (double)output.Values[0];
+                                        break;
 
-                                case BlockSubTypes.Limit:
-                                    contractLimit = Math.Min(contractLimit, (int)output.Values[0]);
-                                    break;
+                                    case BlockSubTypes.Limit:
+                                        contractLimit = Math.Min(contractLimit, (int)output.Values[0]);
+                                        break;
 
-                                case BlockSubTypes.Extra:
-                                    rp.miscValues[output.Values[1].ToString()] = (double)output.Values[0];
-                                    break;
-                                default:
-                                    throw new NotSupportedException($"Unsupported block subtype: {lb.SubType}");
-                            }
+                                    case BlockSubTypes.Extra:
+                                        rp.miscValues[output.Values[1].ToString()] = (double)output.Values[0];
+                                        break;
+                                    default:
+                                        throw new NotSupportedException($"Unsupported block subtype: {lb.SubType}");
+                                }
                         }
                     }
 
@@ -226,6 +236,7 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
 
             public void Update(UpdateTypes type)
             {
+
             }
         }
         #endregion
@@ -243,30 +254,37 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
             public ExecutionProduct Execute(SignalEngine.SignalProduct SP1, RiskEngine.RiskProduct RP1)
             {
                 ExecutionProduct exp;
+                if (RP1.size == 0)
+                    RP1.size = 1;
+
                 try
                 {
-                    if (SP1.direction == MarketPosition.Flat || RP1.size == 0)
+                    if (SP1.direction == MarketPosition.Flat)
                     {
                         exp = new ExecutionProduct { info = "No Signal" };
                     }
                     else if (SP1.direction == MarketPosition.Long)
                     {
                         _Host.EnterLong(RP1.size, "Long_Aurora");
+                        _Host.keyValuePairs["TradesThisChunk"] = (int)_Host.keyValuePairs["TradesThisChunk"] + 1;
                         exp = new ExecutionProduct { info = $"Entering Long {RP1.size} contracts" };
+                        if (RP1.miscValues.Count > 0 && RP1.miscValues["sarAccel"] != null)
+                            _Host.SetParabolicStop(CalculationMode.Percent, (double)RP1.miscValues["sarAccel"]);
                     }
                     else if (SP1.direction == MarketPosition.Short)
                     {
                         _Host.EnterShort(RP1.size, "Short_Aurora");
+                        _Host.keyValuePairs["TradesThisChunk"] = (int)_Host.keyValuePairs["TradesThisChunk"] + 1;
                         exp = new ExecutionProduct { info = $"Entering Short {RP1.size} contracts" };
+                        if (RP1.miscValues.Count > 0 && RP1.miscValues["sarAccel"] != null)
+                            _Host.SetParabolicStop(CalculationMode.Percent, (double)RP1.miscValues["sarAccel"]);
                     }
                     else
                     {
                         exp = new ExecutionProduct { info = "Invalid Signal" };
+                        _Host.ATDebug("Invalid Signal from Execution Engine", LogMode.Log, LogLevel.Warning);
                     }
-                    if (RP1.miscValues.Count > 0 && RP1.miscValues["sarAccel"] != null)
-                    {
-                        _Host.SetParabolicStop(CalculationMode.Percent, (double)RP1.miscValues["sarAccel"]);
-                    }
+                    
                 }
                 catch (Exception ex)
                 {
