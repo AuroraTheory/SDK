@@ -48,6 +48,8 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
             Debug
         }
 
+        protected abstract void Register();
+
         public List<LogicBlock> ParseConfigFile(string filePath)
         {
             AlgoConfig algoConfig = new();
@@ -65,13 +67,13 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
                 {
                     LogicBlock lb = blockFactory.Create(lbc.BID, this, lbc.BParameters);
                     lbs.Add(lb);
-                    this.ATDebug($"{lbc.BID} Config Loaded", LogMode.Log);
                 }
+                ATDebug("ALL BLOCKS INITIALIZED", LogMode.Log, LogLevel.Information);
             }
             catch (Exception ex)
             {
                 lbs = [];
-                this.ATDebug($"Exception in ParseConfigFile {ex.Message}, {ex.StackTrace}", LogMode.Log, LogLevel.Error);
+                this.ATDebug($"BLOCKS FAILED TO INITIALIZED: {ex.Message}, {ex.StackTrace}", LogMode.Log, LogLevel.Error);
             }
             return lbs;
         }
@@ -124,16 +126,20 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
 
         internal void DataLoadedHandler()
         {
+            Register();
+
             List<LogicBlock> _aBlocks = ParseConfigFile(CFGPATH);
             List<LogicBlock> _sBlocks = SortLogicBlocks(_aBlocks, BlockTypes.Signal);
             List<LogicBlock> _rBlocks = SortLogicBlocks(_aBlocks, BlockTypes.Risk);
             List<LogicBlock> _uBlocks = SortLogicBlocks(_aBlocks, BlockTypes.Update);
             List<LogicBlock> _eBlocks = SortLogicBlocks(_aBlocks, BlockTypes.Execution);
+            ATDebug("ALL BLOCKS SORTED", LogMode.Log, LogLevel.Information);
 
             _signalEngine = new(this, this, _sBlocks);
             _riskEngine = new(this, this, _rBlocks);
             _updateEngine = new(this, _uBlocks);
             _executionEngine = new(this, _eBlocks);
+            ATDebug("ALL ENGINES INITIALIZED", LogMode.Log, LogLevel.Information);
         }
         
         public void OnStateChangedHandler(State state)
@@ -157,16 +163,6 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
         {
             try
             {
-                //ATDebug("OnBarUpdate: Triggered", LogMode.Debug);
-                /*
-                Too Lazy to finish the fancy debug log shit rn
-
-                if (_signalEngine == null || _riskEngine == null || _updateEngine == null || _executionEngine == null)
-                {
-                    ATDebug("OnBarUpdate: Failed to ")
-                    return;
-                }
-                */
                 SignalEngine.SignalProduct SGL1 = _signalEngine.Evaluate();
                 RiskEngine.RiskProduct RSK1 = _riskEngine.Evaluate();
 
@@ -177,6 +173,20 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
             {
                 Print($"Error in OnBarUpdate: {ex.Message}");
             }
+        }
+
+        protected override void OnExecutionUpdate(Execution execution, string executionId, double price, int quantity, MarketPosition marketPosition, string orderId, DateTime time)
+        {
+            
+        }
+
+        protected override void OnOrderUpdate(Order order, double limitPrice, double stopPrice, int quantity, int filled, double averageFillPrice, OrderState orderState, DateTime time, Cbi.ErrorCode error, string comment)
+        {
+        }
+
+        protected override void OnPositionUpdate(Position position, double averagePrice, int quantity, MarketPosition marketPosition)
+        {
+            
         }
     }
 }
