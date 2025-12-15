@@ -23,14 +23,12 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
                 public string Name;
             }
 
-            private StrategyBase _host;
-            private AuroraStrategy _strategy;
+            private AuroraStrategy _host;
             private List<LogicBlock> _logicblocks;
 
-            public SignalEngine(StrategyBase Host, AuroraStrategy Strategy, List<LogicBlock> LogicBlocks)
+            public SignalEngine(AuroraStrategy Strategy, List<LogicBlock> LogicBlocks)
             {
-                _host = Host;
-                _strategy = Strategy;
+                _host = Strategy;
 
                 foreach (LogicBlock lb in LogicBlocks)
                 {
@@ -49,34 +47,44 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
                 try
                 {
                     if (_logicblocks is not null && _logicblocks.Count != 0)
-                        // should we do a forloop to eval and then a forloop to aggregate?
-                        foreach (LogicBlock lb in _logicblocks)
+                    {
+                        try
                         {
-                            LogicTicket lt1 = lb.Forward();
-                            switch (lb.SubType)
+                            foreach (LogicBlock lb in _logicblocks)
                             {
-                                case BlockSubTypes.Bias:
-                                    if (lt1.Value is not null)
-                                        if ((int)lt1.Value == 1)
-                                            biasCount++;
-                                        else
-                                            biasCount--;
-                                    break;
-                                case BlockSubTypes.Filter:
-                                    if (lt1.Value is not null)
-                                        if ((bool)lt1.Value is false)
-                                            return new SignalProduct
-                                            {
-                                                orderType = OrderType.Market,
-                                                direction = MarketPosition.Flat,
-                                                Name = "Filtered"
-                                            };
-                                    break;
-                                default:
-                                    _strategy.ATDebug($"tf1");
-                                    break;
+                                LogicTicket lt1 = lb.Forward();
+                                switch (lb.SubType)
+                                {
+                                    case BlockSubTypes.Bias:
+                                        if (lt1.Value is not null)
+                                            if ((int)lt1.Value == 1)
+                                                biasCount++;
+                                            else if ((int)lt1.Value == -1)
+                                                biasCount--;
+                                        break;
+                                    case BlockSubTypes.Filter:
+                                        if (lt1.Value is not null)
+                                            if ((bool)lt1.Value is false)
+                                                SP = new SignalProduct
+                                                {
+                                                    orderType = OrderType.Market,
+                                                    direction = MarketPosition.Flat,
+                                                    Name = "Filtered"
+                                                };
+                                        break;
+                                    default:
+                                        _host.ATDebug($"tf1");
+                                        break;
+                                }
                             }
                         }
+                        catch (Exception ex)
+                        {
+                            _host.ATDebug(ex.ToString());
+                        }
+                    }
+                    else
+                        _host.ATDebug("Null Logic Blocks", LogMode.Log, LogLevel.Warning);
 
                     if (biasCount > 0)
                     {
@@ -96,13 +104,14 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
                         SP.orderType = OrderType.Market;
                         SP.Name = "Neutral Bias";
                     }
-                    _strategy.ATDebug($"Signal Engine Completed: direction:{SP.direction}, name: {SP.Name}");
                 }
                 catch (Exception ex)
                 {
-                    _strategy.ATDebug($"Signal Engine: Exception: {ex.Message}, {ex.StackTrace}", LogMode.Log, LogLevel.Error);
+                    _host.ATDebug($"Signal Engine: Exception: {ex.Message}, {ex.StackTrace}", LogMode.Log, LogLevel.Error);
                     throw;
                 }
+
+                _host.ATDebug($"Signal Engine Completed: direction:{SP.direction}, name: {SP.Name}");
                 return SP;
             }
         }
@@ -183,7 +192,7 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
 
                     rp.size = contracts;
 
-                    _strategy.ATDebug($"Risk Engine Completed: Contracts={contracts}, Multiplier={multiplier}");
+                    //_strategy.ATDebug($"Risk Engine Completed: Contracts={contracts}, Multiplier={multiplier}");
                 }
                 catch (Exception ex)
                 {
@@ -228,45 +237,43 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
                 public string info;
             }
 
-            StrategyBase _Host;
-            List<LogicBlock> _LogicBlocks;
+            AuroraStrategy _Host;
 
-            public ExecutionEngine(StrategyBase Host, List<LogicBlock> LogicBlocks)
+            public ExecutionEngine(AuroraStrategy Host)
             {
                 _Host = Host;
-                _LogicBlocks = LogicBlocks;
-                foreach (LogicBlock lb in LogicBlocks)
-                    if (lb.Type != BlockTypes.Execution) throw new ArrayTypeMismatchException();
             }
 
             public ExecutionProduct Execute(SignalEngine.SignalProduct SP1, RiskEngine.RiskProduct RP1)
             {
+                ExecutionProduct exp;
                 try
                 {
                     if (SP1.direction == MarketPosition.Flat || RP1.size == 0)
                     {
-                        return new ExecutionProduct { info = "No Signal" };
+                        exp = new ExecutionProduct { info = "No Signal" };
                     }
                     else if (SP1.direction == MarketPosition.Long)
                     {
                         _Host.EnterLong(RP1.size, "Long_Aurora");
-                        return new ExecutionProduct { info = $"Entering Long {RP1.size} contracts" };
+                        exp = new ExecutionProduct { info = $"Entering Long {RP1.size} contracts" };
                     }
                     else if (SP1.direction == MarketPosition.Short)
                     {
                         _Host.EnterShort(RP1.size, "Short_Aurora");
-                        return new ExecutionProduct { info = $"Entering Short {RP1.size} contracts" };
+                        exp = new ExecutionProduct { info = $"Entering Short {RP1.size} contracts" };
                     }
                     else
                     {
-                        return new ExecutionProduct { info = "Invalid Signal" };
+                        exp = new ExecutionProduct { info = "Invalid Signal" };
                     }
                 }
                 catch (Exception ex)
                 {
-                    _Host.Print($"Error in Execution Engine Execute: {ex.Message}");
-                    return new ExecutionProduct { info = "Error" };
+                    _Host.ATDebug($"Exception in Execution Engine: {ex.Message}, {ex.StackTrace}", LogMode.Log, LogLevel.Error);
+                    exp = new ExecutionProduct { info = "Error" };
                 }
+                return exp;
             }
         }
         #endregion

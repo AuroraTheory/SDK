@@ -26,20 +26,16 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
     {
         // TODO: Create a time series data structure to hold external data sources
         // TODO: Then create a dict or list to hold those datastructures to be called by logic blocks
-        [NinjaScriptProperty, Display(Name = "DEBUG MODE", GroupName = "Aurora Settings")]
+        [NinjaScriptProperty, Display(Name = "GLOBAL DEBUG MODE", GroupName = "Aurora Settings")]
         public bool DEBUG { get; set; } = false;
 
         [NinjaScriptProperty, Display(Name = "CONFIG FILE", GroupName = "Aurora Settings")]
         public string CFGPATH { get; set; } = "";
 
-        // Engine Collection
         private SignalEngine _signalEngine;
         private RiskEngine _riskEngine;
         private UpdateEngine _updateEngine;
         private ExecutionEngine _executionEngine;
-
-        // List of Blocks
-        private List<LogicBlock> Blocks;
 
         public enum LogMode
         {
@@ -135,11 +131,13 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
             List<LogicBlock> _eBlocks = SortLogicBlocks(_aBlocks, BlockTypes.Execution);
             ATDebug("ALL BLOCKS SORTED", LogMode.Log, LogLevel.Information);
 
-            _signalEngine = new(this, this, _sBlocks);
+            _signalEngine = new(this, _sBlocks);
             _riskEngine = new(this, this, _rBlocks);
             _updateEngine = new(this, _uBlocks);
-            _executionEngine = new(this, _eBlocks);
+            _executionEngine = new(this);
             ATDebug("ALL ENGINES INITIALIZED", LogMode.Log, LogLevel.Information);
+
+            ATDebug("AURORA STRATEGY INIT COMPLETE", LogMode.Log, LogLevel.Information);
         }
         
         public void OnStateChangedHandler(State state)
@@ -159,6 +157,7 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
         }
         #endregion
 
+        #region NinjaScript Methods
         protected override void OnBarUpdate()
         {
             try
@@ -188,5 +187,6 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
         {
             
         }
+        #endregion
     }
 }
