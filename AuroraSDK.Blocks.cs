@@ -39,7 +39,8 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
             Filter,
             Regime, // Future implementation, just an idea for now
             Multiplier,
-            Limit
+            Limit,
+            Extra,
         }
 
         public struct BlockConfig
@@ -57,7 +58,7 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
             public int TicketId;
             public int BlockId;
             public Type DataType;
-            public object Value;
+            public List<object> Values;
         }
 
         public abstract class LogicBlock

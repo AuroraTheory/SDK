@@ -48,43 +48,36 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
                 {
                     if (_logicblocks is not null && _logicblocks.Count != 0)
                     {
-                        try
+                        foreach (LogicBlock lb in _logicblocks)
                         {
-                            foreach (LogicBlock lb in _logicblocks)
+                            LogicTicket lt1 = lb.Forward();
+                            switch (lb.SubType)
                             {
-                                LogicTicket lt1 = lb.Forward();
-                                switch (lb.SubType)
-                                {
-                                    case BlockSubTypes.Bias:
-                                        if (lt1.Value is not null)
-                                            if ((int)lt1.Value == 1)
-                                                biasCount++;
-                                            else if ((int)lt1.Value == -1)
-                                                biasCount--;
-                                        break;
-                                    case BlockSubTypes.Filter:
-                                        if (lt1.Value is not null)
-                                            if ((bool)lt1.Value is false)
-                                                SP = new SignalProduct
-                                                {
-                                                    orderType = OrderType.Market,
-                                                    direction = MarketPosition.Flat,
-                                                    Name = "Filtered"
-                                                };
-                                        break;
-                                    default:
-                                        _host.ATDebug($"tf1");
-                                        break;
-                                }
+                                case BlockSubTypes.Bias:
+                                    if (lt1.Values[0] is not null)
+                                        if ((int)lt1.Values[0] == 1)
+                                            biasCount++;
+                                        else if ((int)lt1.Values[0] == -1)
+                                            biasCount--;
+                                    break;
+                                case BlockSubTypes.Filter:
+                                    if (lt1.Values[0] is not null)
+                                        if ((bool)lt1.Values[0] is false)
+                                            SP = new SignalProduct
+                                            {
+                                                orderType = OrderType.Market,
+                                                direction = MarketPosition.Flat,
+                                                Name = "Filtered"
+                                            };
+                                    break;
+                                default:
+                                    _host.ATDebug($"tf1");
+                                    break;
                             }
-                        }
-                        catch (Exception ex)
-                        {
-                            _host.ATDebug(ex.ToString());
                         }
                     }
                     else
-                        _host.ATDebug("Null Logic Blocks", LogMode.Log, LogLevel.Warning);
+                        _host.ATDebug("Null Logic Blocks", LogMode.Debug);
 
                     if (biasCount > 0)
                     {
@@ -111,7 +104,7 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
                     throw;
                 }
 
-                _host.ATDebug($"Signal Engine Completed: direction:{SP.direction}, name: {SP.Name}");
+                //_host.ATDebug($"Signal Engine Completed: direction:{SP.direction}, name: {SP.Name}");
                 return SP;
             }
         }
@@ -160,24 +153,30 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
                 int contractLimit = int.MaxValue;
                 try
                 {
-                    foreach (var lb in _logicblocks)
+                    if (_logicblocks is not null && _logicblocks.Count != 0)
                     {
-                        LogicTicket output = lb.Forward();
-                        logicOutputs[lb.Id] = output;
-
-                        switch (lb.SubType)
+                        foreach (var lb in _logicblocks)
                         {
-                            case BlockSubTypes.Multiplier:
-                                // best-effort cast; will throw if the underlying value isn't convertible
-                                multiplier *= (double)output.Value;
-                                break;
+                            LogicTicket output = lb.Forward();
+                            logicOutputs[lb.Id] = output;
 
-                            case BlockSubTypes.Limit:
-                                contractLimit = Math.Min(contractLimit, (int)output.Value);
-                                break;
+                            if (output.Values.Count != 0)
+                            switch (lb.SubType)
+                            {
+                                case BlockSubTypes.Multiplier:
+                                    multiplier *= (double)output.Values[0];
+                                    break;
 
-                            default:
-                                throw new NotSupportedException($"Unsupported block subtype: {lb.SubType}");
+                                case BlockSubTypes.Limit:
+                                    contractLimit = Math.Min(contractLimit, (int)output.Values[0]);
+                                    break;
+
+                                case BlockSubTypes.Extra:
+                                    rp.miscValues[output.Values[1].ToString()] = (double)output.Values[0];
+                                    break;
+                                default:
+                                    throw new NotSupportedException($"Unsupported block subtype: {lb.SubType}");
+                            }
                         }
                     }
 
@@ -217,32 +216,29 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
                 OnPositionUpdate
             }
 
-            public UpdateEngine(StrategyBase Host, List<LogicBlock> LogicBlocks)
+            private AuroraStrategy _host;
+            private List<LogicBlock> _blocks;
+
+            public UpdateEngine(AuroraStrategy Host, List<LogicBlock> LogicBlocks)
             {
-                //throw new NotImplementedException();
+                _host = Host;
             }
 
             public void Update(UpdateTypes type)
             {
-                //throw new NotImplementedException();
             }
         }
         #endregion
 
         #region Execution Engine
-        public class ExecutionEngine
+        public class ExecutionEngine(AuroraStrategy Host)
         {
             public struct ExecutionProduct
             {
                 public string info;
             }
 
-            AuroraStrategy _Host;
-
-            public ExecutionEngine(AuroraStrategy Host)
-            {
-                _Host = Host;
-            }
+            AuroraStrategy _Host = Host;
 
             public ExecutionProduct Execute(SignalEngine.SignalProduct SP1, RiskEngine.RiskProduct RP1)
             {
@@ -266,6 +262,10 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
                     else
                     {
                         exp = new ExecutionProduct { info = "Invalid Signal" };
+                    }
+                    if (RP1.miscValues.Count > 0 && RP1.miscValues["sarAccel"] != null)
+                    {
+                        _Host.SetParabolicStop(CalculationMode.Percent, (double)RP1.miscValues["sarAccel"]);
                     }
                 }
                 catch (Exception ex)

@@ -170,22 +170,23 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
             }
             catch (Exception ex)
             {
-                Print($"Error in OnBarUpdate: {ex.Message}");
+                Print($"Error in OnBarUpdate: {ex.Message}, {ex.StackTrace}");
             }
         }
 
         protected override void OnExecutionUpdate(Execution execution, string executionId, double price, int quantity, MarketPosition marketPosition, string orderId, DateTime time)
         {
-            
+            _updateEngine.Update(UpdateEngine.UpdateTypes.OnBarUpdate);
         }
 
         protected override void OnOrderUpdate(Order order, double limitPrice, double stopPrice, int quantity, int filled, double averageFillPrice, OrderState orderState, DateTime time, Cbi.ErrorCode error, string comment)
         {
+            _updateEngine.Update(UpdateEngine.UpdateTypes.OnOrderUpdate);
         }
 
         protected override void OnPositionUpdate(Position position, double averagePrice, int quantity, MarketPosition marketPosition)
         {
-            
+            _updateEngine.Update(UpdateEngine.UpdateTypes.OnPositionUpdate);
         }
         #endregion
     }
