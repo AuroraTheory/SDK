@@ -62,8 +62,7 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
 
         public abstract class LogicBlock
         {
-            internal StrategyBase _host;
-            internal AuroraStrategy _strategy;
+            internal AuroraStrategy _host;
             public Dictionary<string, object> Parameters { get; private set; }
             public List<int> DataIds { get; private set; }
             public Type TicketDataType { get; private set; }
@@ -71,10 +70,9 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
             public BlockTypes Type { get; private set; }
             public BlockSubTypes SubType { get; private set; }
 
-            protected internal void Initialize(StrategyBase Host, AuroraStrategy Strategy, BlockConfig Config) // must be called from abstracted constructor
+            protected internal void Initialize(AuroraStrategy Host, BlockConfig Config) // must be called from abstracted constructor
             {
                 this._host = Host;
-                this._strategy = Strategy;
                 this.Id = Config.BlockId;
                 this.Type = Config.BlockType;
                 this.SubType = Config.BlockSubType;
