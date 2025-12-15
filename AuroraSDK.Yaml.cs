@@ -47,7 +47,7 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
 
             public static Func<AuroraStrategy, Dictionary<string, object>, LogicBlock> Create(string blockId, AuroraStrategy host, Dictionary<string, object> parameters)
             {
-                if (_map[blockId] == null)
+                if (!_map.ContainsKey(blockId))
                     throw new InvalidOperationException($"Unknown BID {blockId}");
 
                 return _map[blockId];
