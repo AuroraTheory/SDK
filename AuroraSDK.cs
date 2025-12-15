@@ -71,7 +71,7 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
             catch (Exception ex)
             {
                 lbs = [];
-                this.ATDebug($"Exception in ParseConfigFile {ex.Message}", LogMode.Log, LogLevel.Error);
+                this.ATDebug($"Exception in ParseConfigFile {ex.Message}, {ex.StackTrace}", LogMode.Log, LogLevel.Error);
             }
             return lbs;
         }

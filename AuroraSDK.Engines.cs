@@ -33,7 +33,10 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
                 _strategy = Strategy;
 
                 foreach (LogicBlock lb in LogicBlocks)
-                    if (lb.Type != BlockTypes.Signal) throw new ArrayTypeMismatchException();
+                {
+                    if (lb.Type != BlockTypes.Signal || (lb.SubType != BlockSubTypes.Bias && lb.SubType != BlockSubTypes.Filter)) throw new ArrayTypeMismatchException();
+                }
+
 
                 _logicblocks = [.. LogicBlocks];
             }
@@ -49,23 +52,25 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
                         // should we do a forloop to eval and then a forloop to aggregate?
                         foreach (LogicBlock lb in _logicblocks)
                         {
-                            logicOutputs[lb.Id] = lb.Forward();
+                            LogicTicket lt1 = lb.Forward();
                             switch (lb.SubType)
                             {
                                 case BlockSubTypes.Bias:
-                                    if (logicOutputs[lb.Id].Value is not null && (bool)logicOutputs[lb.Id].Value is true)
-                                        biasCount++;
-                                    else
-                                        biasCount--;
+                                    if (lt1.Value is not null)
+                                        if ((int)lt1.Value == 1)
+                                            biasCount++;
+                                        else
+                                            biasCount--;
                                     break;
                                 case BlockSubTypes.Filter:
-                                    if (logicOutputs[lb.Id].Value is not null && (bool)logicOutputs[lb.Id].Value is false)
-                                        return new SignalProduct
-                                        {
-                                            orderType = OrderType.Market,
-                                            direction = MarketPosition.Flat,
-                                            Name = "Filtered"
-                                        };
+                                    if (lt1.Value is not null)
+                                        if ((bool)lt1.Value is false)
+                                            return new SignalProduct
+                                            {
+                                                orderType = OrderType.Market,
+                                                direction = MarketPosition.Flat,
+                                                Name = "Filtered"
+                                            };
                                     break;
                                 default:
                                     _strategy.ATDebug($"tf1");
@@ -95,13 +100,8 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
                 }
                 catch (Exception ex)
                 {
-                    _strategy.ATDebug($"Signal Engine: Exception: {ex.Message}");
-                    return new SignalProduct
-                    {
-                        orderType = OrderType.Market,
-                        direction = MarketPosition.Flat,
-                        Name = "Error"
-                    };
+                    _strategy.ATDebug($"Signal Engine: Exception: {ex.Message}, {ex.StackTrace}", LogMode.Log, LogLevel.Error);
+                    throw;
                 }
                 return SP;
             }
@@ -153,7 +153,7 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
                 {
                     foreach (var lb in _logicblocks)
                     {
-                        var output = lb.Forward();
+                        LogicTicket output = lb.Forward();
                         logicOutputs[lb.Id] = output;
 
                         switch (lb.SubType)
@@ -187,13 +187,8 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
                 }
                 catch (Exception ex)
                 {
-                    _strategy.ATDebug($"Error in Risk Engine Evaluate: {ex.Message}");
-                    return new RiskProduct
-                    {
-                        size = 0,
-                        name = "Error",
-                        miscValues = new Dictionary<string, object>()
-                    };
+                    _strategy.ATDebug($"Error in Risk Engine Evaluate: {ex.Message}, {ex.StackTrace}", LogMode.Log, LogLevel.Error);
+                    throw;
                 }
                 return rp;
             }
