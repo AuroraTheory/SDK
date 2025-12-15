@@ -18,8 +18,9 @@ using System.Windows.Media;
 using System.Xml.Serialization;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
+using static NinjaTrader.NinjaScript.Strategies.LeafSDK;
 
-namespace NinjaTrader.Custom.AddOns.Aurora.SDK
+namespace NinjaTrader.Custom.Strategies.Aurora.SDK
 {
     public abstract partial class AuroraStrategy : Strategy
     {
@@ -31,12 +32,13 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
         [NinjaScriptProperty, Display(Name = "CONFIG FILE", GroupName = "Aurora Settings")]
         public string CFGPATH { get; set; } = "";
 
-
+        // Engine Collection
         private SignalEngine _signalEngine;
         private RiskEngine _riskEngine;
         private UpdateEngine _updateEngine;
         private ExecutionEngine _executionEngine;
 
+        // List of Blocks
         private List<LogicBlock> Blocks;
 
         public enum LogMode
@@ -54,24 +56,50 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
             try
             {
                 algoConfig = YamlRawLoader.Load(filePath);
+                if (algoConfig == null || algoConfig.Logic == null || algoConfig.Logic.Count == 0)
+                {
+                    this.ATDebug($"ParseConfigFile: Config is Null", LogMode.Log, LogLevel.Error);
+                    throw new NullReferenceException();
+                }
                 foreach (LogicBlockConfig lbc in algoConfig.Logic)
                 {
                     LogicBlock lb = blockFactory.Create(lbc.BID, this, lbc.BParameters);
                     lbs.Add(lb);
+                    this.ATDebug($"{lbc.BID} Config Loaded", LogMode.Log);
                 }
             }
             catch (Exception ex)
             {
                 lbs = [];
-                this.ATDebug($"Exception in ParseConfigFile {ex.Message}");
+                this.ATDebug($"Exception in ParseConfigFile {ex.Message}", LogMode.Log, LogLevel.Error);
             }
             return lbs;
         }
 
-        public void ATDebug(string message, LogMode mode = LogMode.Log, LogLevel level = LogLevel.Information)
+        public List<LogicBlock> SortLogicBlocks(List<LogicBlock> blocks, BlockTypes type)
+        {
+            List<LogicBlock> parsedBlocks = [];
+            try
+            {
+                foreach (LogicBlock block in blocks)
+                {
+                    if (block.Type == type)
+                        parsedBlocks.Add(block);
+                }
+            }
+            catch (Exception ex)
+            {
+                this.ATDebug($"Error parsing logic blocks of type {type}: {ex.Message}", LogMode.Log, LogLevel.Error);
+                return [];
+            }
+            return parsedBlocks;
+        }
+
+        public void ATDebug(string message, LogMode mode = LogMode.Debug, LogLevel level = LogLevel.Information)
         {
             // This is a really simple implementation, make it better in the future
             // Logging at a high frequency causes performance hits
+            // Do a choice for a buffered logging to a file.
             switch (mode)
             {
                 case LogMode.Log:
@@ -83,6 +111,7 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
             }
         }
 
+        #region State Handlers
         internal void SetDefaultsHandler()
         {
 
@@ -96,17 +125,17 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
         internal void DataLoadedHandler()
         {
             List<LogicBlock> _aBlocks = ParseConfigFile(CFGPATH);
-            List<LogicBlock> _sBlocks = ParseLogicBlocks(Blocks, BlockTypes.Signal);
-            List<LogicBlock> _rBlocks = ParseLogicBlocks(Blocks, BlockTypes.Risk);
-            List<LogicBlock> _uBlocks = ParseLogicBlocks(Blocks, BlockTypes.Update);
-            List<LogicBlock> _eBlocks = ParseLogicBlocks(Blocks, BlockTypes.Execution);
+            List<LogicBlock> _sBlocks = SortLogicBlocks(_aBlocks, BlockTypes.Signal);
+            List<LogicBlock> _rBlocks = SortLogicBlocks(_aBlocks, BlockTypes.Risk);
+            List<LogicBlock> _uBlocks = SortLogicBlocks(_aBlocks, BlockTypes.Update);
+            List<LogicBlock> _eBlocks = SortLogicBlocks(_aBlocks, BlockTypes.Execution);
 
             _signalEngine = new(this, this, _sBlocks);
             _riskEngine = new(this, this, _rBlocks);
             _updateEngine = new(this, _uBlocks);
             _executionEngine = new(this, _eBlocks);
         }
-
+        
         public void OnStateChangedHandler(State state)
         {
             switch (state)
@@ -122,31 +151,13 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
                     break;
             }
         }
-
-        public List<LogicBlock> ParseLogicBlocks(List<LogicBlock> blocks, BlockTypes type)
-        {
-            List<LogicBlock> parsedBlocks = [];
-            try
-            {
-                foreach (LogicBlock block in blocks)
-                {
-                    if (block.Type == type)
-                        parsedBlocks.Add(block);
-                }
-            }
-            catch (Exception ex)
-            {
-                Print($"Error parsing logic blocks of type {type}: {ex.Message}");
-                return [];
-            }
-            return parsedBlocks;
-        }
+        #endregion
 
         protected override void OnBarUpdate()
         {
             try
             {
-                ATDebug("OnBarUpdate: Triggered", LogMode.Debug);
+                //ATDebug("OnBarUpdate: Triggered", LogMode.Debug);
                 /*
                 Too Lazy to finish the fancy debug log shit rn
 

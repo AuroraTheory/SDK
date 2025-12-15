@@ -6,8 +6,7 @@ using System;
 using System.Collections.Generic;
 #endregion
 
-
-namespace NinjaTrader.Custom.AddOns.Aurora.SDK
+namespace NinjaTrader.Custom.Strategies.Aurora.SDK
 {
     public abstract partial class AuroraStrategy : Strategy
     {
@@ -44,10 +43,8 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
                 SignalProduct SP = new();
                 Dictionary<int, LogicTicket> logicOutputs = [];
                 int biasCount = 0;
-                _strategy.ATDebug("Signal Engine: Product Initialization Complete");
                 try
                 {
-                    _strategy.ATDebug("Signal Engine: Logic Loop Start");
                     if (_logicblocks is not null && _logicblocks.Count != 0)
                         // should we do a forloop to eval and then a forloop to aggregate?
                         foreach (LogicBlock lb in _logicblocks)
@@ -75,7 +72,6 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
                                     break;
                             }
                         }
-                    _strategy.ATDebug("Signal Engine: Logic Loop End");
 
                     if (biasCount > 0)
                     {
@@ -95,7 +91,7 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
                         SP.orderType = OrderType.Market;
                         SP.Name = "Neutral Bias";
                     }
-                    _strategy.ATDebug($"Signal Engine: direction:{SP.direction}");
+                    _strategy.ATDebug($"Signal Engine Completed: direction:{SP.direction}, name: {SP.Name}");
                 }
                 catch (Exception ex)
                 {
@@ -144,20 +140,17 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
 
             public RiskProduct Evaluate()
             {
-                _strategy.ATDebug("Risk Engine: Step Start");
                 var rp = new RiskProduct
                 {
                     size = 0,
                     name = string.Empty,
-                    miscValues = new Dictionary<string, object>()
+                    miscValues = []
                 };
                 var logicOutputs = new Dictionary<int, LogicTicket>();
                 double multiplier = 1.0;
                 int contractLimit = int.MaxValue;
-                _strategy.ATDebug("Risk Engine: Product Initialization Complete");
                 try
                 {
-                    _strategy.ATDebug("Risk Engine: Logic Loop Start");
                     foreach (var lb in _logicblocks)
                     {
                         var output = lb.Forward();
@@ -178,9 +171,6 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
                                 throw new NotSupportedException($"Unsupported block subtype: {lb.SubType}");
                         }
                     }
-                    _strategy.ATDebug("Risk Engine: Step End");
-
-                    _strategy.ATDebug($"Risk Engine: BaseContracts={BaseContracts}, Multiplier={multiplier}, ContractLimit={contractLimit}");
 
                     // Multiply base contracts by multiplier before rounding
                     int contracts = (int)Math.Round(BaseContracts * multiplier);
@@ -193,7 +183,7 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
 
                     rp.size = contracts;
 
-                    _strategy.ATDebug($"Risk Engine: Final Contract Size={rp.size}");
+                    _strategy.ATDebug($"Risk Engine Completed: Contracts={contracts}, Multiplier={multiplier}");
                 }
                 catch (Exception ex)
                 {

@@ -17,11 +17,11 @@ using System.Text;
 using System.Threading;
 using System.Windows.Controls;
 using System.Windows.Media;
-using static NinjaTrader.Custom.AddOns.Aurora.SDK.AuroraStrategy;
+using static NinjaTrader.Custom.Strategies.Aurora.SDK.AuroraStrategy;
 #endregion
 
 
-namespace NinjaTrader.Custom.AddOns.Aurora.SDK
+namespace NinjaTrader.Custom.Strategies.Aurora.SDK
 {
     public abstract partial class AuroraStrategy : Strategy
     {
