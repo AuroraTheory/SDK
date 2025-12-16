@@ -1,51 +1,51 @@
 using NinjaTrader.Cbi;
-using NinjaTrader.Core.FloatingPoint;
-using NinjaTrader.Data;
 using NinjaTrader.NinjaScript;
 using NinjaTrader.NinjaScript.Strategies;
-using SharpDX.Win32;
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
-using System.IO;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Xml.Serialization;
-using YamlDotNet.Serialization;
-using YamlDotNet.Serialization.NamingConventions;
-using static NinjaTrader.NinjaScript.Strategies.LeafSDK;
 
 namespace NinjaTrader.Custom.Strategies.Aurora.SDK
 {
     public abstract partial class AuroraStrategy : Strategy
     {
-        // TODO: Create a time series data structure to hold external data sources
-        // TODO: Then create a dict or list to hold those datastructures to be called by logic blocks
-        [NinjaScriptProperty, Display(Name = "DEBUG MODE", GroupName = "Aurora Settings")]
+        #region Parameters
+        [NinjaScriptProperty, Display(Name = "GLOBAL DEBUG MODE", GroupName = "Aurora Settings")]
         public bool DEBUG { get; set; } = false;
 
         [NinjaScriptProperty, Display(Name = "CONFIG FILE", GroupName = "Aurora Settings")]
         public string CFGPATH { get; set; } = "";
 
-        // Engine Collection
+        [NinjaScriptProperty, Display(Name = "BASE CONTRACTS", GroupName = "Aurora Settings")]
+        public int BASECONTRACTS { get; set; } = 10;
+        #endregion
+
         private SignalEngine _signalEngine;
         private RiskEngine _riskEngine;
         private UpdateEngine _updateEngine;
         private ExecutionEngine _executionEngine;
+        private List<LogicBlock> _logicBlocks;
 
-        // List of Blocks
-        private List<LogicBlock> Blocks;
+        internal Dictionary<string, object> keyValuePairs = [];
 
         public enum LogMode
         {
             Log,
             Print,
             Debug
+        }
+
+        protected abstract void Register();
+
+        public double MultiplyAll(double baseValue, IReadOnlyList<double> factors)
+        {
+            double result = baseValue;
+
+            foreach (double factor in factors)
+                result *= factor;
+
+            return result;
         }
 
         public List<LogicBlock> ParseConfigFile(string filePath)
@@ -63,36 +63,34 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
                 }
                 foreach (LogicBlockConfig lbc in algoConfig.Logic)
                 {
-                    LogicBlock lb = blockFactory.Create(lbc.BID, this, lbc.BParameters);
+                    LogicBlock lb = blockFactory.Create(lbc.BID, this, lbc.BParameters, lbc.PID);
                     lbs.Add(lb);
-                    this.ATDebug($"{lbc.BID} Config Loaded", LogMode.Log);
                 }
+                ATDebug("ALL BLOCKS INITIALIZED", LogMode.Log, LogLevel.Information);
             }
             catch (Exception ex)
             {
                 lbs = [];
-                this.ATDebug($"Exception in ParseConfigFile {ex.Message}, {ex.StackTrace}", LogMode.Log, LogLevel.Error);
+                this.ATDebug($"BLOCKS FAILED TO INITIALIZED: {ex.Message}, {ex.StackTrace}", LogMode.Log, LogLevel.Error);
             }
+            _logicBlocks = lbs;
             return lbs;
         }
 
         public List<LogicBlock> SortLogicBlocks(List<LogicBlock> blocks, BlockTypes type)
         {
-            List<LogicBlock> parsedBlocks = [];
-            try
-            {
-                foreach (LogicBlock block in blocks)
-                {
-                    if (block.Type == type)
-                        parsedBlocks.Add(block);
-                }
-            }
-            catch (Exception ex)
-            {
-                this.ATDebug($"Error parsing logic blocks of type {type}: {ex.Message}", LogMode.Log, LogLevel.Error);
+            if (blocks == null)
                 return [];
-            }
-            return parsedBlocks;
+
+            var filtered = blocks
+              .Where(b => b.Type == type)
+              .ToList();
+
+
+            filtered = [.. filtered.OrderBy(b => b.Pid)];
+
+
+            return filtered;
         }
 
         public void ATDebug(string message, LogMode mode = LogMode.Debug, LogLevel level = LogLevel.Information)
@@ -124,18 +122,32 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
 
         internal void DataLoadedHandler()
         {
-            List<LogicBlock> _aBlocks = ParseConfigFile(CFGPATH);
-            List<LogicBlock> _sBlocks = SortLogicBlocks(_aBlocks, BlockTypes.Signal);
-            List<LogicBlock> _rBlocks = SortLogicBlocks(_aBlocks, BlockTypes.Risk);
-            List<LogicBlock> _uBlocks = SortLogicBlocks(_aBlocks, BlockTypes.Update);
-            List<LogicBlock> _eBlocks = SortLogicBlocks(_aBlocks, BlockTypes.Execution);
+            try
+            {
+                Register();
 
-            _signalEngine = new(this, this, _sBlocks);
-            _riskEngine = new(this, this, _rBlocks);
-            _updateEngine = new(this, _uBlocks);
-            _executionEngine = new(this, _eBlocks);
+                List<LogicBlock> _aBlocks = ParseConfigFile(CFGPATH);
+                List<LogicBlock> _sBlocks = SortLogicBlocks(_aBlocks, BlockTypes.Signal);
+                List<LogicBlock> _rBlocks = SortLogicBlocks(_aBlocks, BlockTypes.Risk);
+                List<LogicBlock> _uBlocks = SortLogicBlocks(_aBlocks, BlockTypes.Update);
+                List<LogicBlock> _eBlocks = SortLogicBlocks(_aBlocks, BlockTypes.Execution);
+                ATDebug("ALL BLOCKS SORTED", LogMode.Log, LogLevel.Information);
+
+                _signalEngine = new(this, _sBlocks);
+                _riskEngine = new(this, _rBlocks);
+                _updateEngine = new(this, _uBlocks);
+                _executionEngine = new(this, _eBlocks);
+                ATDebug("ALL ENGINES INITIALIZED", LogMode.Log, LogLevel.Information);
+            }
+            catch (Exception ex)
+            {
+                ATDebug($"Exception in DataLoadedHandler: {ex.Message}, {ex.StackTrace}", LogMode.Log, LogLevel.Error);
+                throw;
+            }
+
+            ATDebug("AURORA STRATEGY INIT COMPLETE", LogMode.Log, LogLevel.Information);
         }
-        
+
         public void OnStateChangedHandler(State state)
         {
             switch (state)
@@ -153,20 +165,11 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
         }
         #endregion
 
+        #region NinjaScript Methods
         protected override void OnBarUpdate()
         {
             try
             {
-                //ATDebug("OnBarUpdate: Triggered", LogMode.Debug);
-                /*
-                Too Lazy to finish the fancy debug log shit rn
-
-                if (_signalEngine == null || _riskEngine == null || _updateEngine == null || _executionEngine == null)
-                {
-                    ATDebug("OnBarUpdate: Failed to ")
-                    return;
-                }
-                */
                 SignalEngine.SignalProduct SGL1 = _signalEngine.Evaluate();
                 RiskEngine.RiskProduct RSK1 = _riskEngine.Evaluate();
 
@@ -175,8 +178,24 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
             }
             catch (Exception ex)
             {
-                Print($"Error in OnBarUpdate: {ex.Message}");
+                Print($"Error in OnBarUpdate: {ex.Message}, {ex.StackTrace}");
             }
         }
+
+        protected override void OnExecutionUpdate(Execution execution, string executionId, double price, int quantity, MarketPosition marketPosition, string orderId, DateTime time)
+        {
+            _updateEngine.Update(UpdateEngine.UpdateTypes.OnBarUpdate);
+        }
+
+        protected override void OnOrderUpdate(Order order, double limitPrice, double stopPrice, int quantity, int filled, double averageFillPrice, OrderState orderState, DateTime time, Cbi.ErrorCode error, string comment)
+        {
+            _updateEngine.Update(UpdateEngine.UpdateTypes.OnOrderUpdate);
+        }
+
+        protected override void OnPositionUpdate(Position position, double averagePrice, int quantity, MarketPosition marketPosition)
+        {
+            _updateEngine.Update(UpdateEngine.UpdateTypes.OnPositionUpdate);
+        }
+        #endregion
     }
 }

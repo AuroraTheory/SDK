@@ -35,16 +35,20 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
 
         public enum BlockSubTypes
         {
+            Signal,
             Bias,
             Filter,
             Regime, // Future implementation, just an idea for now
             Multiplier,
-            Limit
+            Limit,
+            Execution,
+            Extra,
         }
 
         public struct BlockConfig
         {
-            public int BlockId;
+            public string BlockId;
+            public int Pid;
             public List<int> DataIds; // wtf is this used for
             public BlockTypes BlockType;
             public Type TicketDataType;
@@ -55,30 +59,34 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
         public struct LogicTicket
         {
             public int TicketId;
-            public int BlockId;
+            public string BlockId;
             public Type DataType;
-            public object Value;
+            public List<object> Values;
         }
 
         public abstract class LogicBlock
         {
             internal AuroraStrategy _host;
+            public bool Initialized;
             public Dictionary<string, object> Parameters { get; private set; }
             public List<int> DataIds { get; private set; }
             public Type TicketDataType { get; private set; }
-            public int Id { get; private set; }
+            public string Id { get; private set; }
+            public int Pid { get; private set; }
             public BlockTypes Type { get; private set; }
             public BlockSubTypes SubType { get; private set; }
 
             protected internal void Initialize(AuroraStrategy Host, BlockConfig Config) // must be called from abstracted constructor
             {
                 this._host = Host;
+                this.Pid = Config.Pid;
                 this.Id = Config.BlockId;
                 this.Type = Config.BlockType;
                 this.SubType = Config.BlockSubType;
                 this.TicketDataType = Config.TicketDataType;
                 this.DataIds = Config.DataIds;
                 this.Parameters = Config.Parameters;
+                this.Initialized = true;
             }
 
             public abstract LogicTicket Forward();
