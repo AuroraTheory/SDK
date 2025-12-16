@@ -24,7 +24,7 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
 
                 foreach (LogicBlockConfig cfg in configs)
                 {
-                    LogicBlock block = _factory.Create(cfg.BID, host, cfg.BParameters);
+                    LogicBlock block = _factory.Create(cfg.BID, host, cfg.BParameters, cfg.PID);
 
                     blocks.Add(block);
                 }
@@ -35,9 +35,9 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
 
         public static class LogicBlockRegistry
         {
-            private static readonly Dictionary<string, Func<AuroraStrategy, Dictionary<string, object>, LogicBlock>> _map = [];
+            private static readonly Dictionary<string, Func<AuroraStrategy, Dictionary<string, object>, int, LogicBlock>> _map = [];
 
-            public static void Register(string blockId, Func<AuroraStrategy, Dictionary<string, object>, LogicBlock> factory)
+            public static void Register(string blockId, Func<AuroraStrategy, Dictionary<string, object>, int, LogicBlock> factory)
             {
                 if (_map.ContainsKey(blockId))
                     return;
@@ -45,7 +45,7 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
                 _map[blockId] = factory;
             }
 
-            public static Func<AuroraStrategy, Dictionary<string, object>, LogicBlock> Create(string blockId, AuroraStrategy host, Dictionary<string, object> parameters)
+            public static Func<AuroraStrategy, Dictionary<string, object>, int, LogicBlock> Create(string blockId, AuroraStrategy host, Dictionary<string, object> parameters, int p)
             {
                 if (!_map.ContainsKey(blockId))
                     throw new InvalidOperationException($"Unknown BID {blockId}");
@@ -59,15 +59,16 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
             LogicBlock Create(
               string blockId,
               AuroraStrategy host,
-              Dictionary<string, object> parameters);
+              Dictionary<string, object> parameters,
+              int pid);
         }
 
         public sealed class LogicBlockFactory : ILogicBlockFactory
         {
-            public LogicBlock Create(string blockId, AuroraStrategy host, Dictionary<string, object> parameters)
+            public LogicBlock Create(string blockId, AuroraStrategy host, Dictionary<string, object> parameters, int pid)
             {
-                Func<AuroraStrategy, Dictionary<string, object>, LogicBlock> fact = LogicBlockRegistry.Create(blockId, host, parameters);
-                return fact(host, parameters);
+                Func<AuroraStrategy, Dictionary<string, object>, int, LogicBlock> fact = LogicBlockRegistry.Create(blockId, host, parameters, pid);
+                return fact(host, parameters, pid);
             }
         }
 
@@ -87,6 +88,7 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
         public sealed class LogicBlockConfig
         {
             public string BID { get; set; }
+            public int PID { get; set; }
             public string DPID { get; set; }
 
             public string BType { get; set; }

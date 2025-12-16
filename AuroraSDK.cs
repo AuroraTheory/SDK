@@ -1,24 +1,10 @@
 using NinjaTrader.Cbi;
-using NinjaTrader.Core.FloatingPoint;
-using NinjaTrader.Data;
 using NinjaTrader.NinjaScript;
 using NinjaTrader.NinjaScript.Strategies;
-using SharpDX.Win32;
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
-using System.IO;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Xml.Serialization;
-using YamlDotNet.Serialization;
-using YamlDotNet.Serialization.NamingConventions;
-using static NinjaTrader.NinjaScript.Strategies.LeafSDK;
 
 namespace NinjaTrader.Custom.Strategies.Aurora.SDK
 {
@@ -50,6 +36,16 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
 
         protected abstract void Register();
 
+        public double MultiplyAll(double baseValue, IReadOnlyList<double> factors)
+        {
+            double result = baseValue;
+
+            foreach (double factor in factors)
+                result *= factor;
+
+            return result;
+        }
+
         public List<LogicBlock> ParseConfigFile(string filePath)
         {
             AlgoConfig algoConfig = new();
@@ -65,7 +61,7 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
                 }
                 foreach (LogicBlockConfig lbc in algoConfig.Logic)
                 {
-                    LogicBlock lb = blockFactory.Create(lbc.BID, this, lbc.BParameters);
+                    LogicBlock lb = blockFactory.Create(lbc.BID, this, lbc.BParameters, lbc.PID);
                     lbs.Add(lb);
                 }
                 ATDebug("ALL BLOCKS INITIALIZED", LogMode.Log, LogLevel.Information);
@@ -75,26 +71,24 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
                 lbs = [];
                 this.ATDebug($"BLOCKS FAILED TO INITIALIZED: {ex.Message}, {ex.StackTrace}", LogMode.Log, LogLevel.Error);
             }
+            _logicBlocks = lbs;
             return lbs;
         }
 
         public List<LogicBlock> SortLogicBlocks(List<LogicBlock> blocks, BlockTypes type)
         {
-            List<LogicBlock> parsedBlocks = [];
-            try
-            {
-                foreach (LogicBlock block in blocks)
-                {
-                    if (block.Type == type)
-                        parsedBlocks.Add(block);
-                }
-            }
-            catch (Exception ex)
-            {
-                this.ATDebug($"Error parsing logic blocks of type {type}: {ex.Message}", LogMode.Log, LogLevel.Error);
+            if (blocks == null)
                 return [];
-            }
-            return parsedBlocks;
+
+            var filtered = blocks
+              .Where(b => b.Type == type)
+              .ToList();
+
+
+            filtered = [.. filtered.OrderBy(b => b.Pid)];
+
+
+            return filtered;
         }
 
         public void ATDebug(string message, LogMode mode = LogMode.Debug, LogLevel level = LogLevel.Information)
@@ -131,7 +125,6 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
                 Register();
 
                 List<LogicBlock> _aBlocks = ParseConfigFile(CFGPATH);
-                _logicBlocks = _aBlocks;
                 List<LogicBlock> _sBlocks = SortLogicBlocks(_aBlocks, BlockTypes.Signal);
                 List<LogicBlock> _rBlocks = SortLogicBlocks(_aBlocks, BlockTypes.Risk);
                 List<LogicBlock> _uBlocks = SortLogicBlocks(_aBlocks, BlockTypes.Update);
@@ -139,9 +132,9 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
                 ATDebug("ALL BLOCKS SORTED", LogMode.Log, LogLevel.Information);
 
                 _signalEngine = new(this, _sBlocks);
-                _riskEngine = new(this, this, _rBlocks);
+                _riskEngine = new(this, _rBlocks);
                 _updateEngine = new(this, _uBlocks);
-                _executionEngine = new(this);
+                _executionEngine = new(this, _eBlocks);
                 ATDebug("ALL ENGINES INITIALIZED", LogMode.Log, LogLevel.Information);
             }
             catch (Exception ex)
@@ -152,7 +145,7 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
 
             ATDebug("AURORA STRATEGY INIT COMPLETE", LogMode.Log, LogLevel.Information);
         }
-        
+
         public void OnStateChangedHandler(State state)
         {
             switch (state)

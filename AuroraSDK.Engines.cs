@@ -1,4 +1,4 @@
-#region Definitions
+#region Using declarations
 using NinjaTrader.Cbi;
 using NinjaTrader.NinjaScript;
 using NinjaTrader.NinjaScript.Strategies;
@@ -11,213 +11,497 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
 {
     public abstract partial class AuroraStrategy : Strategy
     {
-        #region Signal Engine
-        public class SignalEngine
-        {
-            // the purpose of the signal engine is to loop through signal logic blocks to spit out either Long Short or Neutral.
-            // the challenge comes when summarizing the outputs of the logic block
+        #region Engine helpers
 
-            public struct SignalProduct
+        public static class Guard
+        {
+            public static T NotNull<T>(T value, string paramName) where T : class
             {
-                public OrderType orderType;
-                public MarketPosition direction;
-                public string Name;
+                if (value == null)
+                    throw new ArgumentNullException(paramName);
+                return value;
             }
 
-            private AuroraStrategy _host;
-            private List<LogicBlock> _logicblocks;
-
-            public SignalEngine(AuroraStrategy Strategy, List<LogicBlock> LogicBlocks)
+            public static IList<T> NotNullList<T>(IList<T> value, string paramName)
             {
-                _host = Strategy;
+                if (value == null)
+                    throw new ArgumentNullException(paramName);
+                return value;
+            }
 
-                foreach (LogicBlock lb in LogicBlocks)
+            public static void Require(bool condition, string message)
+            {
+                if (!condition)
+                    throw new ArgumentException(message);
+            }
+        }
+
+        public static class Safe
+        {
+            public static bool TryGetAt(IList<object> values, int index, out object value)
+            {
+                value = null;
+                if (values == null || index < 0 || index >= values.Count)
+                    return false;
+
+                value = values[index];
+                return value != null;
+            }
+
+            public static bool TryToMarketPosition(object value, out MarketPosition mp)
+            {
+                mp = MarketPosition.Flat;
+                if (value == null)
+                    return false;
+
+                if (value is MarketPosition m)
                 {
-                    if (lb.Type != BlockTypes.Signal || (lb.SubType != BlockSubTypes.Bias && lb.SubType != BlockSubTypes.Filter && lb.SubType != BlockSubTypes.Signal)) throw new ArrayTypeMismatchException();
+                    mp = m;
+                    return true;
                 }
 
+                // Allow int-backed enums or strings if upstream blocks emit them.
+                try
+                {
+                    if (value is int i)
+                    {
+                        mp = (MarketPosition)i;
+                        return true;
+                    }
 
-                _logicblocks = [.. LogicBlocks];
+                    if (value is string s && Enum.TryParse(s, true, out MarketPosition parsed))
+                    {
+                        mp = parsed;
+                        return true;
+                    }
+                }
+                catch
+                {
+                    // Intentionally swallow; caller decides behavior.
+                }
+
+                return false;
             }
+
+            public static bool TryToBool(object value, out bool b)
+            {
+                b = false;
+                if (value == null)
+                    return false;
+
+                if (value is bool bb)
+                {
+                    b = bb;
+                    return true;
+                }
+
+                try
+                {
+                    b = Convert.ToBoolean(value);
+                    return true;
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+
+            public static bool TryToDouble(object value, out double d)
+            {
+                d = 0;
+                if (value == null)
+                    return false;
+
+                if (value is double dd)
+                {
+                    d = dd;
+                    return true;
+                }
+
+                try
+                {
+                    d = Convert.ToDouble(value);
+                    return true;
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+
+            public static bool TryToInt(object value, out int i)
+            {
+                i = 0;
+                if (value == null)
+                    return false;
+
+                if (value is int ii)
+                {
+                    i = ii;
+                    return true;
+                }
+
+                try
+                {
+                    i = Convert.ToInt32(value);
+                    return true;
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+
+            public static bool TryGetDouble(IDictionary<string, object> dict, string key, out double value)
+            {
+                value = 0;
+                if (dict == null || string.IsNullOrWhiteSpace(key))
+                    return false;
+
+                if (!dict.TryGetValue(key, out var raw))
+                    return false;
+
+                return TryToDouble(raw, out value);
+            }
+        }
+
+        #endregion
+
+        #region Signal Engine
+
+        public sealed class SignalEngine
+        {
+            public struct SignalProduct
+            {
+                public OrderType OrderType;
+                public MarketPosition Direction;
+                public string Name;
+
+                public static SignalProduct Flat(string name)
+                {
+                    return new SignalProduct
+                    {
+                        OrderType = OrderType.Market,
+                        Direction = MarketPosition.Flat,
+                        Name = name ?? string.Empty
+                    };
+                }
+            }
+
+            private readonly AuroraStrategy _host;
+            private readonly List<LogicBlock> _logicBlocks;
+
+            public SignalEngine(AuroraStrategy host, List<LogicBlock> logicBlocks)
+            {
+                _host = Guard.NotNull(host, nameof(host));
+                _logicBlocks = [.. Guard.NotNullList(logicBlocks, nameof(logicBlocks))];
+
+                bool hasBias = false;
+                bool hasSignal = false;
+
+                for (int i = 0; i < _logicBlocks.Count; i++)
+                {
+                    var lb = _logicBlocks[i];
+                    if (lb == null)
+                        throw new ArgumentException("LogicBlocks contains a null element.", nameof(logicBlocks));
+
+                    Guard.Require(lb.Type == BlockTypes.Signal, $"SignalEngine expects BlockTypes.Signal blocks only (found: {lb.Type}).");
+
+                    bool validSubtype =
+                        lb.SubType == BlockSubTypes.Bias ||
+                        lb.SubType == BlockSubTypes.Filter ||
+                        lb.SubType == BlockSubTypes.Signal;
+
+                    Guard.Require(validSubtype, $"SignalEngine received unsupported subtype: {lb.SubType}.");
+
+                    if (lb.SubType == BlockSubTypes.Bias)
+                    {
+                        if (hasBias)
+                            _host.ATDebug("SignalEngine: multiple bias blocks detected.", LogMode.Debug);
+                        hasBias = true;
+                    }
+
+                    if (lb.SubType == BlockSubTypes.Signal)
+                    {
+                        if (hasSignal)
+                            _host.ATDebug("SignalEngine: multiple signal blocks detected.", LogMode.Debug);
+                        hasSignal = true;
+                    }
+                }
+
+                if (!hasSignal)
+                    _host.ATDebug("SignalEngine: no Signal subtype block found; engine will likely remain Neutral.", LogMode.Debug);
+
+                if (!hasBias)
+                    _host.ATDebug("SignalEngine: no Bias subtype block found; engine will likely remain Neutral.", LogMode.Debug);
+            }
+
+            // PSEUDOCODE / PLAN (detailed):
+            // 1. Evaluate() iterates configured logic blocks and collects outputs.
+            // 2. Maintain two MarketPosition markers: 'bias' and 'signal', both start Flat.
+            // 3. For each initialized logic block:
+            //    a. Call Forward() to obtain a LogicTicket with a Values list.
+            //    b. If Values is empty, skip block.
+            //    c. Inspect lb.SubType:
+            //       - Signal: attempt to read Values[0], convert to MarketPosition, assign to 'signal'.
+            //       - Bias: attempt to read Values[0], convert to MarketPosition, assign to 'bias'.
+            //       - Filter: attempt to read Values[0], convert to bool; if true -> immediately return Flat("Filtered").
+            //    d. Use Safe helpers to safely access and convert typed values (handles nulls, ints, strings, etc.).
+            // 4. After looping, reconcile bias+signal:
+            //    - If both bias and signal are Long -> return Long SignalProduct.
+            //    - If both bias and signal are Short -> return Short SignalProduct.
+            //    - Otherwise return Neutral Flat SignalProduct.
+            // 5. Errors are logged then rethrown; unexpected subtypes are warned.
+            // Notes on conversions:
+            // - Safe.TryGetAt prevents index errors and null entries.
+            // - Safe.TryToMarketPosition accepts MarketPosition, int-backed enums, and strings (case-insensitive).
+            // - Safe.TryToBool handles bools and convertible values via Convert.ToBoolean.
+            // This commented method replaces the original switch block to explicitly document behavior.
 
             public SignalProduct Evaluate()
             {
-                SignalProduct SP = new();
-                Dictionary<int, LogicTicket> logicOutputs = [];
-                int biasCount = 0;
-                int signal = 0;
                 try
                 {
-                    if (_logicblocks != null && _logicblocks.Count != 0)
+                    if (_logicBlocks == null || _logicBlocks.Count == 0)
                     {
-                        foreach (LogicBlock lb in _logicblocks)
+                        _host.ATDebug("SignalEngine: no logic blocks configured.", LogMode.Debug);
+                        return SignalProduct.Flat("No Blocks");
+                    }
+
+                    // Default to Neutral / Flat bias and signal.
+                    MarketPosition bias = MarketPosition.Flat;
+                    MarketPosition signal = MarketPosition.Flat;
+
+                    for (int i = 0; i < _logicBlocks.Count; i++)
+                    {
+                        var lb = _logicBlocks[i];
+                        if (lb == null || !lb.Initialized)
+                            continue;
+
+                        LogicTicket ticket;
+                        try
                         {
-                            LogicTicket lt1 = lb.Forward();
-                            switch (lb.SubType)
-                            {
-                                case BlockSubTypes.Signal:
-                                    if (lt1.Values != null)
-                                        signal = (int)lt1.Values[0];
-                                    break;
-                                case BlockSubTypes.Bias:
-                                    if (lt1.Values[0] != null)
-                                        if ((int)lt1.Values[0] == 1)
-                                            biasCount++;
-                                        else if ((int)lt1.Values[0] == -1)
-                                            biasCount--;
-                                    break;
-                                case BlockSubTypes.Filter:
-                                    if (lt1.Values[0] != null)
-                                    {
-                                        if ((bool)lt1.Values[0] == true)
-                                        {
-                                            return new SignalProduct
-                                            {
-                                                orderType = OrderType.Market,
-                                                direction = MarketPosition.Flat,
-                                                Name = "Filtered"
-                                            };
-                                        }
-                                    }
-                                    break;
-                                default:
-                                    _host.ATDebug($"tf1");
-                                    break;
-                            }
+                            ticket = lb.Forward();
+                        }
+                        catch (Exception ex)
+                        {
+                            _host.ATDebug($"SignalEngine: Forward() failed for block subtype {lb.SubType}. {ex}", LogMode.Log, LogLevel.Error);
+                            throw;
+                        }
+
+                        var values = ticket.Values;
+                        if (values == null || values.Count == 0)
+                            continue;
+
+                        switch (lb.SubType)
+                        {
+                            case BlockSubTypes.Signal:
+                                // Purpose:
+                                // - Read the primary output of a Signal block (expected at values[0]).
+                                // - Convert that output to a MarketPosition and set the 'signal' marker.
+                                // Behavior details:
+                                // - If values[0] contains a MarketPosition, it is used directly.
+                                // - If values[0] is an int (enum-backed) or a string ("Long"/"Short"/"Flat"), Safe.TryToMarketPosition
+                                //   will attempt conversion. If conversion fails, this block is ignored.
+                                // - This value represents the runtime signal direction produced by the block.
+                                if (Safe.TryGetAt(values, 0, out var s0) && Safe.TryToMarketPosition(s0, out var sMp))
+                                    signal = sMp;
+                                break;
+
+                            case BlockSubTypes.Bias:
+                                // Purpose:
+                                // - Read a persistent or higher-level directional bias (expected at values[0]).
+                                // - Convert that output to a MarketPosition and set the 'bias' marker.
+                                // Behavior details:
+                                // - Bias often represents longer-term or committee-driven direction.
+                                // - Same flexible conversions as Signal (MarketPosition, int, string) are supported.
+                                // - Multiple Bias blocks may be present; last valid assignment in iteration wins.
+                                if (Safe.TryGetAt(values, 0, out var b0) && Safe.TryToMarketPosition(b0, out var bMp))
+                                    bias = bMp;
+                                break;
+
+                            case BlockSubTypes.Filter:
+                                // Purpose:
+                                // - Determine whether the current market/context should be filtered out (no trades).
+                                // - The Filter block is expected to emit a boolean-like value at values[0].
+                                // Behavior details:
+                                // - Safe.TryToBool handles explicit bools and convertible types (e.g., 0/1, "true"/"false").
+                                // - If the Filter returns true (isFiltered), the engine immediately returns a Flat SignalProduct
+                                //   with the name "Filtered" to indicate that trading should be suppressed for this evaluation cycle.
+                                // - This is an early exit so filters take precedence over bias/signal reconciliation.
+                                if (Safe.TryGetAt(values, 0, out var f0) && Safe.TryToBool(f0, out var isFiltered) && isFiltered)
+                                {
+                                    _host.ATDebug($"Filtered: {lb.Id} - {_host.Time[0].ToString()}");
+                                    return SignalProduct.Flat("Filtered");
+                                }
+                                break;
+
+                            default:
+                                // Unexpected subtype; log a warning and continue.
+                                _host.ATDebug($"SignalEngine: unexpected subtype reached: {lb.SubType}", LogMode.Log, LogLevel.Warning);
+                                break;
                         }
                     }
-                    else
-                        _host.ATDebug("Null Logic Blocks", LogMode.Debug);
 
-                    if (biasCount >= 1 && signal == 1)
-                    {
-                        SP.direction = MarketPosition.Long;
-                        SP.orderType = OrderType.Market;
-                        SP.Name = "Long Bias";
-                    }
-                    else if (biasCount <= -1 && signal == -1)
-                    {
-                        SP.direction = MarketPosition.Short;
-                        SP.orderType = OrderType.Market;
-                        SP.Name = "Short Bias";
-                    }
-                    else if (signal == 0 || biasCount == 0)
-                    {
-                        SP.direction = MarketPosition.Flat;
-                        SP.orderType = OrderType.Market;
-                        SP.Name = "Neutral Bias";
-                    }
+                    // Reconcile final action:
+                    // - Only enter a direction when both bias and signal agree (both Long or both Short).
+                    if (bias == MarketPosition.Long && signal == MarketPosition.Long)
+                        return new SignalProduct { Direction = MarketPosition.Long, OrderType = OrderType.Market, Name = "Long Bias" };
+
+                    if (bias == MarketPosition.Short && signal == MarketPosition.Short)
+                        return new SignalProduct { Direction = MarketPosition.Short, OrderType = OrderType.Market, Name = "Short Bias" };
+
+                    // Default neutral outcome when bias and signal don't both agree.
+                    return SignalProduct.Flat("Neutral Bias");
                 }
                 catch (Exception ex)
                 {
-                    _host.ATDebug($"Signal Engine: Exception: {ex.Message}, {ex.StackTrace}", LogMode.Log, LogLevel.Error);
+                    _host.ATDebug($"SignalEngine: Evaluate() exception: {ex}", LogMode.Log, LogLevel.Error);
                     throw;
                 }
-
-                //_host.ATDebug($"Signal Engine Completed: direction:{SP.direction}, name: {SP.Name}");
-                return SP;
             }
         }
+
         #endregion
 
         #region Risk Engine
-        public class RiskEngine
+
+        public sealed class RiskEngine
         {
             public struct RiskProduct
             {
-                public int size;
-                public string name;
-                public Dictionary<string, object> miscValues;
+                public int Size;
+                public string Name;
+                public Dictionary<string, object> MiscValues;
             }
 
-            private StrategyBase _host;
-            private AuroraStrategy _strategy;
-            private List<LogicBlock> _logicblocks;
-            int BaseContracts { get; set; } = 1;
+            private readonly AuroraStrategy _host;
+            private readonly List<LogicBlock> _logicBlocks;
 
-            public RiskEngine(StrategyBase Host, AuroraStrategy Strategy, List<LogicBlock> LogicBlocks)
+            // Make this configurable per instance.
+            private readonly Func<int> _baseContractsProvider;
+
+            public RiskEngine(AuroraStrategy host, List<LogicBlock> logicBlocks, Func<int> baseContractsProvider = null)
             {
-                _host = Host;
-                _strategy = Strategy;
-                BaseContracts = 10; // TODO: THIS NEEDS TO BE FIXED, CANT BE STATIC.
-                                    // FIX IT DURING THE CONFIG FILE BRANCH
+                _host = Guard.NotNull(host, nameof(host));
+                _logicBlocks = new List<LogicBlock>(Guard.NotNullList(logicBlocks, nameof(logicBlocks)));
+                _baseContractsProvider = baseContractsProvider ?? (() => 1);
 
-                // TODO: clean the list of logic blocks to make sure they are all the valid type of logic block
+                for (int i = 0; i < _logicBlocks.Count; i++)
+                {
+                    var lb = _logicBlocks[i];
+                    if (lb == null)
+                        throw new ArgumentException("LogicBlocks contains a null element.", nameof(logicBlocks));
 
-                foreach (LogicBlock lb in LogicBlocks)
-                    if (lb.Type != BlockTypes.Risk) throw new ArrayTypeMismatchException();
-
-                _logicblocks = [.. LogicBlocks];
+                    Guard.Require(lb.Type == BlockTypes.Risk, $"RiskEngine expects BlockTypes.Risk blocks only (found: {lb.Type}).");
+                }
             }
 
             public RiskProduct Evaluate()
             {
                 var rp = new RiskProduct
                 {
-                    size = 0,
-                    name = string.Empty,
-                    miscValues = []
+                    Size = 0,
+                    Name = string.Empty,
+                    MiscValues = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
                 };
-                var logicOutputs = new Dictionary<string, LogicTicket>();
-                double multiplier = 1.0;
-                int contractLimit = int.MaxValue;
+
                 try
                 {
-                    if (_logicblocks is not null && _logicblocks.Count != 0)
+                    int baseContracts = _baseContractsProvider();
+                    if (baseContracts < 0)
+                        baseContracts = 0;
+
+                    if (_logicBlocks == null || _logicBlocks.Count == 0)
                     {
-                        foreach (var lb in _logicblocks)
+                        rp.Size = baseContracts;
+                        rp.Name = "BaseOnly";
+                        return rp;
+                    }
+
+                    var multipliers = new List<double>();
+                    int contractLimit = int.MaxValue;
+
+                    for (int i = 0; i < _logicBlocks.Count; i++)
+                    {
+                        var lb = _logicBlocks[i];
+                        if (lb == null || !lb.Initialized)
+                            continue;
+
+                        LogicTicket ticket;
+                        try
                         {
-                            LogicTicket output = lb.Forward();
-                            logicOutputs[lb.Id] = output;
+                            ticket = lb.Forward();
+                        }
+                        catch (Exception ex)
+                        {
+                            _host.ATDebug($"RiskEngine: Forward() failed for block subtype {lb.SubType}. {ex}", LogMode.Log, LogLevel.Error);
+                            throw;
+                        }
 
-                            if (output.Values.Count != 0)
-                                switch (lb.SubType)
+                        var values = ticket.Values;
+                        if (values == null || values.Count == 0)
+                            continue;
+
+                        switch (lb.SubType)
+                        {
+                            case BlockSubTypes.Multiplier:
+                                if (Safe.TryGetAt(values, 0, out var m0) && Safe.TryToDouble(m0, out var mul))
+                                    multipliers.Add(mul);
+                                break;
+
+                            case BlockSubTypes.Limit:
+                                if (Safe.TryGetAt(values, 0, out var l0) && Safe.TryToInt(l0, out var lim))
+                                    contractLimit = Math.Min(contractLimit, Math.Max(0, lim));
+                                break;
+
+                            case BlockSubTypes.Extra:
                                 {
-                                    case BlockSubTypes.Multiplier:
-                                        multiplier *= (double)output.Values[0];
+                                    if (!Safe.TryGetAt(values, 1, out var k1))
                                         break;
 
-                                    case BlockSubTypes.Limit:
-                                        contractLimit = Math.Min(contractLimit, (int)output.Values[0]);
+                                    var key = Convert.ToString(k1) ?? string.Empty;
+                                    if (string.IsNullOrWhiteSpace(key))
                                         break;
 
-                                    case BlockSubTypes.Extra:
-                                        rp.miscValues[output.Values[1].ToString()] = (double)output.Values[0];
-                                        break;
-                                    default:
-                                        throw new NotSupportedException($"Unsupported block subtype: {lb.SubType}");
+                                    if (Safe.TryGetAt(values, 0, out var v0))
+                                        rp.MiscValues[key] = v0;
+
+                                    break;
                                 }
+
+                            default:
+                                throw new NotSupportedException($"RiskEngine: unsupported subtype: {lb.SubType}");
                         }
                     }
 
-                    // Multiply base contracts by multiplier before rounding
-                    int contracts = (int)Math.Round(BaseContracts * multiplier);
+                    double scaled = _host.MultiplyAll(baseContracts, multipliers);
+                    if (double.IsNaN(scaled) || double.IsInfinity(scaled) || scaled < 0)
+                        scaled = 0;
 
-                    if (contracts > contractLimit)
-                        contracts = contractLimit;
+                    int finalContracts = (int)Math.Floor(scaled);
 
-                    if (contracts < 0)
-                        contracts = 0;
+                    if (finalContracts > contractLimit)
+                        finalContracts = contractLimit;
 
-                    rp.size = contracts;
-
-                    //_strategy.ATDebug($"Risk Engine Completed: Contracts={contracts}, Multiplier={multiplier}");
+                    rp.Size = finalContracts;
+                    rp.Name = "Computed";
+                    return rp;
                 }
                 catch (Exception ex)
                 {
-                    _strategy.ATDebug($"Error in Risk Engine Evaluate: {ex.Message}, {ex.StackTrace}", LogMode.Log, LogLevel.Error);
+                    _host.ATDebug($"RiskEngine: Evaluate() exception: {ex}", LogMode.Log, LogLevel.Error);
                     throw;
                 }
-                return rp;
             }
         }
 
         #endregion
 
         #region Update Engine
-        public class UpdateEngine
+
+        public sealed class UpdateEngine
         {
-            // update engine will have multiple methods to be called from the strategy core methods
             public enum UpdateTypes
             {
                 OnBarUpdate,
@@ -226,74 +510,96 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
                 OnPositionUpdate
             }
 
-            private AuroraStrategy _host;
-            private List<LogicBlock> _blocks;
+            private readonly AuroraStrategy _host;
+            private readonly List<LogicBlock> _blocks;
 
-            public UpdateEngine(AuroraStrategy Host, List<LogicBlock> LogicBlocks)
+            public UpdateEngine(AuroraStrategy host, List<LogicBlock> logicBlocks)
             {
-                _host = Host;
+                _host = Guard.NotNull(host, nameof(host));
+                _blocks = logicBlocks != null ? new List<LogicBlock>(logicBlocks) : new List<LogicBlock>();
             }
 
             public void Update(UpdateTypes type)
             {
+                // Negative-space: do nothing unless there is work to do.
+                if (_blocks == null || _blocks.Count == 0)
+                    return;
 
+                // Hook for future:
+                // - route updates to blocks that care about this update type
+                // - isolate per-block failures so a single block cannot silently corrupt state
+                for (int i = 0; i < _blocks.Count; i++)
+                {
+                    var lb = _blocks[i];
+                    if (lb == null || !lb.Initialized)
+                        continue;
+
+                    // TODO: implement per-block update dispatch.
+                }
             }
         }
+
         #endregion
 
         #region Execution Engine
-        public class ExecutionEngine(AuroraStrategy Host)
+
+        public sealed class ExecutionEngine
         {
             public struct ExecutionProduct
             {
-                public string info;
+                public string Info;
             }
 
-            AuroraStrategy _Host = Host;
+            private readonly AuroraStrategy _host;
 
-            public ExecutionProduct Execute(SignalEngine.SignalProduct SP1, RiskEngine.RiskProduct RP1)
+            private const string LongSignalName = "Long_Aurora";
+            private const string ShortSignalName = "Short_Aurora";
+            private const string SarAccelKey = "sarAccel";
+            private List<LogicBlock> _logicBlocks;
+
+            public ExecutionEngine(AuroraStrategy host, List<LogicBlock> logicBlocks)
             {
-                ExecutionProduct exp;
-                if (RP1.size == 0)
-                    RP1.size = 1;
+                _host = Guard.NotNull(host, nameof(host));
+                _logicBlocks = logicBlocks;
+            }
 
+            public ExecutionProduct Execute(SignalEngine.SignalProduct sp, RiskEngine.RiskProduct rp)
+            {
                 try
                 {
-                    if (SP1.direction == MarketPosition.Flat)
+                    if (sp.Direction == MarketPosition.Flat)
+                        return new ExecutionProduct { Info = "No Signal" };
+
+                    if (sp.Direction == MarketPosition.Long)
                     {
-                        exp = new ExecutionProduct { info = "No Signal" };
+                        _host.EnterLong(rp.Size, LongSignalName + $"_{_host.keyValuePairs["TradesThisChunk"]}");
+
+                        foreach (LogicBlock lb in _logicBlocks.Where(lb => lb.SubType == BlockSubTypes.Execution))
+                            lb.Forward();
+
+                        return new ExecutionProduct { Info = $"Entering Long {rp.Size} contracts" };
                     }
-                    else if (SP1.direction == MarketPosition.Long)
+                    if (sp.Direction == MarketPosition.Short)
                     {
-                        _Host.EnterLong(RP1.size, "Long_Aurora");
-                        _Host.keyValuePairs["TradesThisChunk"] = (int)_Host.keyValuePairs["TradesThisChunk"] + 1;
-                        exp = new ExecutionProduct { info = $"Entering Long {RP1.size} contracts" };
-                        if (RP1.miscValues.Count > 0 && RP1.miscValues["sarAccel"] != null)
-                            _Host.SetParabolicStop(CalculationMode.Percent, (double)RP1.miscValues["sarAccel"]);
+                        _host.EnterShort(rp.Size, ShortSignalName + $"_{_host.keyValuePairs["TradesThisChunk"]}");
+
+                        foreach (LogicBlock lb in _logicBlocks.Where(lb => lb.SubType == BlockSubTypes.Execution))
+                            lb.Forward();
+
+                        return new ExecutionProduct { Info = $"Entering Short {rp.Size} contracts" };
                     }
-                    else if (SP1.direction == MarketPosition.Short)
-                    {
-                        _Host.EnterShort(RP1.size, "Short_Aurora");
-                        _Host.keyValuePairs["TradesThisChunk"] = (int)_Host.keyValuePairs["TradesThisChunk"] + 1;
-                        exp = new ExecutionProduct { info = $"Entering Short {RP1.size} contracts" };
-                        if (RP1.miscValues.Count > 0 && RP1.miscValues["sarAccel"] != null)
-                            _Host.SetParabolicStop(CalculationMode.Percent, (double)RP1.miscValues["sarAccel"]);
-                    }
-                    else
-                    {
-                        exp = new ExecutionProduct { info = "Invalid Signal" };
-                        _Host.ATDebug("Invalid Signal from Execution Engine", LogMode.Log, LogLevel.Warning);
-                    }
-                    
+
+                    _host.ATDebug("ExecutionEngine: invalid MarketPosition in SignalProduct.", LogMode.Log, LogLevel.Warning);
+                    return new ExecutionProduct { Info = "Invalid Signal" };
                 }
                 catch (Exception ex)
                 {
-                    _Host.ATDebug($"Exception in Execution Engine: {ex.Message}, {ex.StackTrace}", LogMode.Log, LogLevel.Error);
-                    exp = new ExecutionProduct { info = "Error" };
+                    _host.ATDebug($"ExecutionEngine: Execute() exception: {ex}", LogMode.Log, LogLevel.Error);
+                    return new ExecutionProduct { Info = "Error" };
                 }
-                return exp;
             }
         }
+
         #endregion
     }
 }
