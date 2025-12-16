@@ -10,19 +10,21 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
 {
     public abstract partial class AuroraStrategy : Strategy
     {
-        // TODO: Create a time series data structure to hold external data sources
-        // TODO: Then create a dict or list to hold those datastructures to be called by logic blocks
+        #region Parameters
         [NinjaScriptProperty, Display(Name = "GLOBAL DEBUG MODE", GroupName = "Aurora Settings")]
         public bool DEBUG { get; set; } = false;
 
         [NinjaScriptProperty, Display(Name = "CONFIG FILE", GroupName = "Aurora Settings")]
         public string CFGPATH { get; set; } = "";
 
+        [NinjaScriptProperty, Display(Name = "BASE CONTRACTS", GroupName = "Aurora Settings")]
+        public int BASECONTRACTS { get; set; } = 10;
+        #endregion
+
         private SignalEngine _signalEngine;
         private RiskEngine _riskEngine;
         private UpdateEngine _updateEngine;
         private ExecutionEngine _executionEngine;
-
         private List<LogicBlock> _logicBlocks;
 
         internal Dictionary<string, object> keyValuePairs = [];

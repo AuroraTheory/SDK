@@ -236,28 +236,6 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
                     _host.ATDebug("SignalEngine: no Bias subtype block found; engine will likely remain Neutral.", LogMode.Debug);
             }
 
-            // PSEUDOCODE / PLAN (detailed):
-            // 1. Evaluate() iterates configured logic blocks and collects outputs.
-            // 2. Maintain two MarketPosition markers: 'bias' and 'signal', both start Flat.
-            // 3. For each initialized logic block:
-            //    a. Call Forward() to obtain a LogicTicket with a Values list.
-            //    b. If Values is empty, skip block.
-            //    c. Inspect lb.SubType:
-            //       - Signal: attempt to read Values[0], convert to MarketPosition, assign to 'signal'.
-            //       - Bias: attempt to read Values[0], convert to MarketPosition, assign to 'bias'.
-            //       - Filter: attempt to read Values[0], convert to bool; if true -> immediately return Flat("Filtered").
-            //    d. Use Safe helpers to safely access and convert typed values (handles nulls, ints, strings, etc.).
-            // 4. After looping, reconcile bias+signal:
-            //    - If both bias and signal are Long -> return Long SignalProduct.
-            //    - If both bias and signal are Short -> return Short SignalProduct.
-            //    - Otherwise return Neutral Flat SignalProduct.
-            // 5. Errors are logged then rethrown; unexpected subtypes are warned.
-            // Notes on conversions:
-            // - Safe.TryGetAt prevents index errors and null entries.
-            // - Safe.TryToMarketPosition accepts MarketPosition, int-backed enums, and strings (case-insensitive).
-            // - Safe.TryToBool handles bools and convertible values via Convert.ToBoolean.
-            // This commented method replaces the original switch block to explicitly document behavior.
-
             public SignalProduct Evaluate()
             {
                 try
@@ -268,7 +246,6 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
                         return SignalProduct.Flat("No Blocks");
                     }
 
-                    // Default to Neutral / Flat bias and signal.
                     MarketPosition bias = MarketPosition.Flat;
                     MarketPosition signal = MarketPosition.Flat;
 
@@ -330,10 +307,7 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
                                 //   with the name "Filtered" to indicate that trading should be suppressed for this evaluation cycle.
                                 // - This is an early exit so filters take precedence over bias/signal reconciliation.
                                 if (Safe.TryGetAt(values, 0, out var f0) && Safe.TryToBool(f0, out var isFiltered) && isFiltered)
-                                {
-                                    _host.ATDebug($"Filtered: {lb.Id} - {_host.Time[0].ToString()}");
                                     return SignalProduct.Flat("Filtered");
-                                }
                                 break;
 
                             default:
@@ -378,21 +352,14 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
             private readonly AuroraStrategy _host;
             private readonly List<LogicBlock> _logicBlocks;
 
-            // Make this configurable per instance.
-            private readonly Func<int> _baseContractsProvider;
-
-            public RiskEngine(AuroraStrategy host, List<LogicBlock> logicBlocks, Func<int> baseContractsProvider = null)
+            public RiskEngine(AuroraStrategy host, List<LogicBlock> logicBlocks)
             {
                 _host = Guard.NotNull(host, nameof(host));
-                _logicBlocks = new List<LogicBlock>(Guard.NotNullList(logicBlocks, nameof(logicBlocks)));
-                _baseContractsProvider = baseContractsProvider ?? (() => 1);
+                _logicBlocks = [.. Guard.NotNullList(logicBlocks, nameof(logicBlocks))];
 
                 for (int i = 0; i < _logicBlocks.Count; i++)
                 {
-                    var lb = _logicBlocks[i];
-                    if (lb == null)
-                        throw new ArgumentException("LogicBlocks contains a null element.", nameof(logicBlocks));
-
+                    var lb = _logicBlocks[i] ?? throw new ArgumentException("LogicBlocks contains a null element.", nameof(logicBlocks));
                     Guard.Require(lb.Type == BlockTypes.Risk, $"RiskEngine expects BlockTypes.Risk blocks only (found: {lb.Type}).");
                 }
             }
@@ -408,7 +375,7 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
 
                 try
                 {
-                    int baseContracts = _baseContractsProvider();
+                    int baseContracts = _host.BASECONTRACTS;
                     if (baseContracts < 0)
                         baseContracts = 0;
 
@@ -476,8 +443,6 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
                     }
 
                     double scaled = _host.MultiplyAll(baseContracts, multipliers);
-                    if (double.IsNaN(scaled) || double.IsInfinity(scaled) || scaled < 0)
-                        scaled = 0;
 
                     int finalContracts = (int)Math.Floor(scaled);
 
@@ -554,7 +519,6 @@ namespace NinjaTrader.Custom.Strategies.Aurora.SDK
 
             private const string LongSignalName = "Long_Aurora";
             private const string ShortSignalName = "Short_Aurora";
-            private const string SarAccelKey = "sarAccel";
             private List<LogicBlock> _logicBlocks;
 
             public ExecutionEngine(AuroraStrategy host, List<LogicBlock> logicBlocks)
