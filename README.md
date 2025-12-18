@@ -2,8 +2,8 @@ Aurora SDK is a modular, block-based framework for building algorithmic trading 
 
 ## Features
 
-- Built on `Strategy` in NinjaScript, integrates with standard events like `OnBarUpdate`, `OnExecutionUpdate`, `OnOrderUpdate`, and `OnPositionUpdate`.
-- Block-based architecture via `LogicBlock` objects, each with a `BlockType` and `BlockSubType` (Signal, Risk, Update, Execution, Regime).
+- Built on `NinjaTrader.NinjaScript.Strategies.Strategy` in NinjaScript, integrates with standard events like `Strategy.OnBarUpdate()`, `Strategy.OnExecutionUpdate()`, `Strategy.OnOrderUpdate()`, and `Strategy.OnPositionUpdate()`.
+- Block-based architecture via `SDK.LogicBlock` objects, each with a `SDK.BlockType` and `SDK.BlockSubType` (Signal, Risk, Update, Execution, Regime).
 - Runtime configuration through YAML files (no recompiles to change logic wiring).
 - Dedicated engines for signal, risk, execution, and updates.
 
