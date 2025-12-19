@@ -1,6 +1,7 @@
 ﻿using NinjaTrader.Cbi;
 using System;
 using System.Collections.Generic;
+using NinjaTrader.Custom.AddOns.Aurora.SDK.Block;
 
 namespace NinjaTrader.Custom.AddOns.Aurora.SDK.Engines
 {
@@ -10,7 +11,7 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK.Engines
 
         public ExecutionEngine(HostStrategy host)
         {
-            _host = Guard.NotNull(host, nameof(host));
+            //_host = Guard.NotNull(host, nameof(host));
         }
 
         public Order Execute(SignalContext Cx0)

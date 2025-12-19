@@ -1,6 +1,7 @@
 ﻿using NinjaTrader.NinjaScript;
 using NinjaTrader.NinjaScript.Strategies;
 using System.Collections.Generic;
+using NinjaTrader.Custom.AddOns.Aurora.SDK.Block;
 
 namespace NinjaTrader.Custom.AddOns.Aurora.SDK
 {
@@ -34,12 +35,12 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
         protected override void OnBarUpdate()
         {
             SignalContext Cx0 = _layer.Forward();
-            List<LogicTicket> Lts = [];
+            List<LogicBlock.LogicTicket> Lts = [];
 
             if (_metaBlocks != null && _metaBlocks.Count != 0)
                 foreach (LogicBlock lb in _metaBlocks)
                 {
-                    LogicTicket lt0 = lb.SafeGuardForward([]); // single value: bool
+                    LogicBlock.LogicTicket lt0 = lb.SafeGuardForward([]); // single value: bool
                     Lts.Add(lt0);
                     if ((bool)lt0.Values[0] == true)
                         return;

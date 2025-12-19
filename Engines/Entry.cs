@@ -2,6 +2,7 @@
 using NinjaTrader.NinjaScript.Strategies;
 using System;
 using System.Collections.Generic;
+using NinjaTrader.Custom.AddOns.Aurora.SDK.Block;
 
 namespace NinjaTrader.Custom.AddOns.Aurora.SDK.Engines
 {
@@ -26,7 +27,7 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK.Engines
 
         public EntryHandler(HostStrategy host, List<LogicBlock> logicBlocks)
         {
-            
+            // Initialization code can be added here if needed
         }
 
         public EntryProduct Evaluate()
