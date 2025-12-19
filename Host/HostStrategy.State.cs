@@ -24,7 +24,7 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
             try
             {
                 this.Register();
-                List<LogicBlock> _aBlocks = null; //ParseConfigFile(CFGPATH);
+                List<Block.LogicBlock> _aBlocks = null; //ParseConfigFile(CFGPATH);
                 _layer.Initialize(this, _aBlocks);
             }
             catch (Exception ex)

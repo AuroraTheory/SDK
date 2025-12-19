@@ -7,7 +7,7 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK.Engines
 {
     public sealed class PositionHandler
     {
-        public PositionHandler(HostStrategy host, List<LogicBlock> logicBlocks)
+        public PositionHandler(HostStrategy host, List<Block.LogicBlock> logicBlocks)
         {
 
         }

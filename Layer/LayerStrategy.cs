@@ -1,8 +1,8 @@
 ﻿
-using System.Collections.Generic;
-using System.Windows.Documents;
-using NinjaTrader.Custom.AddOns.Aurora.SDK.Engines;
+using NinjaTrader.Cbi;
 using NinjaTrader.Custom.AddOns.Aurora.SDK.Block;
+using NinjaTrader.Custom.AddOns.Aurora.SDK.Engines;
+using System.Collections.Generic;
 
 namespace NinjaTrader.Custom.AddOns.Aurora.SDK
 {
@@ -21,6 +21,17 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
             
             // TODO: do more shit up in here
             // Parse logic blocks
+        }
+
+        public struct SignalContext
+        {
+            public bool isEntry;
+            public SignalOrderTypes Type;
+            public MarketPosition Direction;
+            public int Size;
+            public string Name;
+            public double LimitPrice;
+            public double StopPrice;
         }
 
         // Gets called from OnBarUpdate in HostStrategy

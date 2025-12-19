@@ -8,17 +8,6 @@ using System.Threading.Tasks;
 
 namespace NinjaTrader.Custom.AddOns.Aurora.SDK.Block
 {
-    public struct SignalContext
-    {
-        public bool isEntry;
-        public SignalOrderTypes Type;
-        public MarketPosition Direction;
-        public int Size;
-        public string Name;
-        public double LimitPrice;
-        public double StopPrice;
-    }
-
     public enum SignalOrderTypes
     {
         Market,

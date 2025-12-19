@@ -1,16 +1,16 @@
 ﻿using NinjaTrader.NinjaScript;
 using NinjaTrader.NinjaScript.Strategies;
 using System.Collections.Generic;
-using NinjaTrader.Custom.AddOns.Aurora.SDK.Block;
 
 namespace NinjaTrader.Custom.AddOns.Aurora.SDK
 {
+    // Host Strategy Abstract Class
     // Only Takes Entry and Signal Signals from LayerStrategy
     public abstract partial class HostStrategy : Strategy
     {
         private LayerStrategy _layer;
         private Engines.ExecutionEngine _eEngine;
-        private List<LogicBlock> _metaBlocks;
+        private List<Block.LogicBlock> _metaBlocks;
 
         protected abstract bool Register();
 
@@ -34,13 +34,13 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
         // Main Entry Point
         protected override void OnBarUpdate()
         {
-            SignalContext Cx0 = _layer.Forward();
-            List<LogicBlock.LogicTicket> Lts = [];
+            LayerStrategy.SignalContext Cx0 = _layer.Forward();
+            List<Block.LogicBlock.LogicTicket> Lts = [];
 
             if (_metaBlocks != null && _metaBlocks.Count != 0)
-                foreach (LogicBlock lb in _metaBlocks)
+                foreach (Block.LogicBlock lb in _metaBlocks)
                 {
-                    LogicBlock.LogicTicket lt0 = lb.SafeGuardForward([]); // single value: bool
+                    Block.LogicBlock.LogicTicket lt0 = lb.SafeGuardForward([]); // single value: bool
                     Lts.Add(lt0);
                     if ((bool)lt0.Values[0] == true)
                         return;
