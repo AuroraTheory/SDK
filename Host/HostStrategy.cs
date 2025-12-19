@@ -1,0 +1,51 @@
+﻿using NinjaTrader.Cbi;
+using NinjaTrader.NinjaScript;
+using NinjaTrader.NinjaScript.Strategies;
+using System.Collections.Generic;
+using System.Windows.Documents;
+
+namespace NinjaTrader.Custom.AddOns.Aurora.SDK
+{
+    // Only Takes Entry and Signal Signals from LayerStrategy
+    public abstract partial class HostStrategy : Strategy
+    {
+        private LayerStrategy _layer;
+        private Engines.ExecutionEngine _eEngine;
+        private List<LogicBlock> _metaBlocks;
+
+        protected abstract bool Register();
+
+        // Initialization Point
+        protected override void OnStateChange()
+        {
+            switch (State)
+            {
+                case State.SetDefaults:
+                    SetDefaultsHandler();
+                    break;
+                case State.Configure:
+                    ConfigureHandler();
+                    break;
+                case State.DataLoaded:
+                    DataLoadedHandler();
+                    break;
+            }
+        }
+
+        // Main Entry Point
+        protected override void OnBarUpdate()
+        {
+           SignalContext Cx0 = _layer.Forward();
+            List<LogicTicket> Lts = [];
+            
+            foreach (LogicBlock lb in _metaBlocks)
+            {
+                LogicTicket lt0 = lb.SafeGuardForward([]);
+                if ((bool)lt0.Values[0] == true)
+                    return;
+            }
+
+            _eEngine.Execute(Cx0);
+        }
+    }
+}
