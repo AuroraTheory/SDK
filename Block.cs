@@ -2,16 +2,12 @@
 using NinjaTrader.NinjaScript.Strategies;
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
 
-namespace NinjaTrader.Custom.AddOns.Aurora.SDK
+namespace NinjaTrader.Custom.AddOns.Aurora.SDK.Block
 {
-    public struct LogicTicket
-    {
-        public int TicketId;
-        public string BlockId;
-        public List<object> Values;
-    }
-
     public struct SignalContext
     {
         public bool isEntry;
@@ -60,24 +56,27 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
         Meta
     }
 
-    public struct BlockConfig
-    {
-        public string BlockId;
-        public BlockTypes BlockType;
-        public BlockSubTypes BlockSubType;
-        public Dictionary<string, Type> ParameterList;
-    }
-
     public abstract class LogicBlock
     {
-        internal Strategy _host;
+        public struct BlockConfig
+        {
+            public string BlockId;
+            public BlockTypes BlockType;
+            public BlockSubTypes BlockSubType;
+            public Dictionary<string, Type> ParameterList;
+        }
 
-        public bool Initialized = false;
+        public struct LogicTicket
+        {
+            public int TicketId;
+            public string BlockId;
+            public List<object> Values;
+        }
 
-        public List<int> DataIds { get; private set; }
-        public Type TicketDataType { get; private set; }
-        public string Id { get; private set; }
-        public int Pid { get; private set; }
+        private Strategy _host;
+
+        public bool Initialized { get; private set; } = false;
+        public string Id { get; private set; } = null;
         public BlockTypes Type { get; private set; }
         public BlockSubTypes SubType { get; private set; }
 
@@ -142,27 +141,6 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
                 BlockId = this.Id,
                 Values = values
             };
-        }
-    }
-
-    public static class LogicBlockRegistry
-    {
-        private static readonly Dictionary<string, Func<HostStrategy, Dictionary<string, object>, LogicBlock>> _map = [];
-
-        public static void Register(string blockId, Func<HostStrategy, Dictionary<string, object>, LogicBlock> factory)
-        {
-            if (_map.ContainsKey(blockId))
-                return;
-
-            _map[blockId] = factory;
-        }
-
-        public static Func<HostStrategy, Dictionary<string, object>, LogicBlock> Create(string blockId, HostStrategy host, Dictionary<string, object> parameters)
-        {
-            if (!_map.ContainsKey(blockId))
-                throw new InvalidOperationException($"Unknown BID {blockId}");
-
-            return _map[blockId];
         }
     }
 }

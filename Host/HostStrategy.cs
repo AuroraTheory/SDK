@@ -1,8 +1,6 @@
-﻿using NinjaTrader.Cbi;
-using NinjaTrader.NinjaScript;
+﻿using NinjaTrader.NinjaScript;
 using NinjaTrader.NinjaScript.Strategies;
 using System.Collections.Generic;
-using System.Windows.Documents;
 
 namespace NinjaTrader.Custom.AddOns.Aurora.SDK
 {
@@ -35,17 +33,21 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
         // Main Entry Point
         protected override void OnBarUpdate()
         {
-           SignalContext Cx0 = _layer.Forward();
+            SignalContext Cx0 = _layer.Forward();
             List<LogicTicket> Lts = [];
-            
-            foreach (LogicBlock lb in _metaBlocks)
-            {
-                LogicTicket lt0 = lb.SafeGuardForward([]);
-                if ((bool)lt0.Values[0] == true)
-                    return;
-            }
+
+            if (_metaBlocks != null && _metaBlocks.Count != 0)
+                foreach (LogicBlock lb in _metaBlocks)
+                {
+                    LogicTicket lt0 = lb.SafeGuardForward([]); // single value: bool
+                    Lts.Add(lt0);
+                    if ((bool)lt0.Values[0] == true)
+                        return;
+                }
+            else return;
 
             _eEngine.Execute(Cx0);
+            return;
         }
     }
 }

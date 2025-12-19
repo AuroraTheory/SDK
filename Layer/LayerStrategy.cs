@@ -1,6 +1,8 @@
 ﻿
 using System.Collections.Generic;
 using System.Windows.Documents;
+using NinjaTrader.Custom.AddOns.Aurora.SDK.Engines;
+using NinjaTrader.Custom.AddOns.Aurora.SDK.Block;
 
 namespace NinjaTrader.Custom.AddOns.Aurora.SDK
 {
@@ -9,24 +11,26 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
         private HostStrategy _host;
         private List<LogicBlock> _blocks;
 
-        private Engines.SignalEngine _signalEngine;
-        private Engines.RiskEngine _riskEngine;
+        private EntryHandler _entryHandler;
+        private ExitHandler _exitHandler;
 
-        // Gets called from OnStateChange(DataLoaded)
+        // Gets called in State.DataLoaded from OnStateChange in HostStrategy
         public void Initialize(HostStrategy host, List<LogicBlock> lbs)
         {
             _host = host;
-    
+            
+            // TODO: do more shit up in here
+            // Parse logic blocks
         }
 
-        // Gets called from OnBarUpdate
+        // Gets called from OnBarUpdate in HostStrategy
         public SignalContext Forward()
         {
-            // Loop through L0 Logic Blocks
-            Engines.SignalEngine.SignalProduct SGL1 = _signalEngine.Evaluate();
-            Engines.RiskEngine.RiskProduct RSK1 = _riskEngine.Evaluate();
+            EntryHandler.EntryProduct SGL1 = _entryHandler.Evaluate();
+            ExitHandler.ExitProduct RSK1 = _exitHandler.Evaluate();
 
-            // spit out an execution signal
+            // TODO: spit out an execution signal
+
             return new();
         }
     }

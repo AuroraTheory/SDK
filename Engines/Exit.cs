@@ -7,9 +7,9 @@ using System.Threading.Tasks;
 
 namespace NinjaTrader.Custom.AddOns.Aurora.SDK.Engines
 {
-    public sealed class RiskEngine
+    public sealed class ExitHandler
     {
-        public struct RiskProduct
+        public struct ExitProduct
         {
             public int Size;
         }
@@ -17,7 +17,7 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK.Engines
         private readonly Strategy _host;
         private readonly List<LogicBlock> _logicBlocks;
 
-        public RiskEngine(Strategy host, List<LogicBlock> logicBlocks)
+        public ExitHandler(Strategy host, List<LogicBlock> logicBlocks)
         {
             //_host = Guard.NotNull(host, nameof(host));
             //_logicBlocks = [.. Guard.NotNullList(_host.SortLogicBlocks(logicBlocks, BlockTypes.Risk), nameof(logicBlocks))];
@@ -40,9 +40,9 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK.Engines
         }
 
 
-        public RiskProduct Evaluate()
+        public ExitProduct Evaluate()
         {
-            var rp = new RiskProduct
+            var rp = new ExitProduct
             {
                 Size = 0,
             };
