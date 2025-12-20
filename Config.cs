@@ -1,7 +1,10 @@
-﻿using System.Collections.Generic;
+﻿using NinjaTrader.Custom.AddOns.Aurora.SDK.Block;
+using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using YamlDotNet.Serialization;
+using static NinjaTrader.Custom.AddOns.Aurora.SDK.AlgoConfig;
 
 namespace NinjaTrader.Custom.AddOns.Aurora.SDK
 {
@@ -68,6 +71,48 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
             AlgoConfig config = deserializer.Deserialize<AlgoConfig>(reader);
 
             return config;
+        }
+    }
+
+    internal sealed class LogicBlockBuilder
+    {
+        private readonly ILogicBlockFactory _factory;
+
+        public LogicBlockBuilder(ILogicBlockFactory factory)
+        {
+            _factory = factory;
+        }
+
+        public List<LogicBlock> Build(HostStrategy host, List<LogicBlockConfig> configs)
+        {
+            var blocks = new List<LogicBlock>();
+
+            foreach (LogicBlockConfig cfg in configs)
+            {
+                LogicBlock block = _factory.Create(cfg.BID, host, cfg.BParameters);
+
+                blocks.Add(block);
+            }
+
+            return blocks;
+        }
+    }
+
+    public interface ILogicBlockFactory
+    {
+        LogicBlock Create(
+          string blockId,
+          HostStrategy host,
+          Dictionary<string, object> parameters
+          );
+    }
+
+    public sealed class LogicBlockFactory : ILogicBlockFactory
+    {
+        public LogicBlock Create(string blockId, HostStrategy host, Dictionary<string, object> parameters)
+        {
+            Func<HostStrategy, Dictionary<string, object>, LogicBlock> fact = LogicBlockRegistry.Create(blockId, host, parameters);
+            return fact(host, parameters);
         }
     }
 }

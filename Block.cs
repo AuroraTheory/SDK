@@ -105,31 +105,22 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK.Block
             this.Parameters = Parameters;
         }
 
-        protected abstract List<object> Forward(Dictionary<string, object> inputs);
+        protected abstract object Forward(Dictionary<string, object> inputs);
 
-        internal LogicTicket SafeGuardForward(Dictionary<string, object> inputs)
+        internal object SafeGuardForward(Dictionary<string, object> inputs)
         {
-            if (this.Initialized == false)
+            object value = null;
+            if (this.Initialized == false) return null;
+            try
             {
-                // TODO: Log
-                return new LogicTicket()
-                {
-                    BlockId = this.Id,
-                    Values = []
-                };
+                value = this.Forward(inputs);
             }
-
-            List<object> values = new();
-
-
-            values = this.Forward(inputs);
-
-
-            return new LogicTicket
+            catch (Exception ex)
             {
-                BlockId = this.Id,
-                Values = values
-            };
+                this._host.Print($"[Aurora][Block:{this.Id}] Exception in Forward: {ex.Message}");
+                return null;
+            }
+            return value;
         }
     }
 }

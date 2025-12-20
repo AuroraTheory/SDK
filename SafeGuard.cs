@@ -19,12 +19,6 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK.SafeGuard
                 throw new ArgumentNullException(paramName);
             return value;
         }
-
-        public static void Require(bool condition, string message)
-        {
-            if (!condition)
-                throw new ArgumentException(message);
-        }
     }
 
     public static class Safe

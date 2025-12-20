@@ -16,6 +16,8 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK.Engines
 
             public static EntryProduct Flat(string name)
             {
+
+
                 return new EntryProduct
                 {
                     OrderType = OrderType.Market,
