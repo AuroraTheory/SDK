@@ -1,17 +1,18 @@
-﻿using NinjaTrader.Cbi;
-using NinjaTrader.NinjaScript;
+﻿using NinjaTrader.NinjaScript;
 using NinjaTrader.NinjaScript.Strategies;
 using System.Collections.Generic;
-using System.Windows.Documents;
 
 namespace NinjaTrader.Custom.AddOns.Aurora.SDK
 {
+    // Host Strategy Abstract Class
     // Only Takes Entry and Signal Signals from LayerStrategy
+#pragma warning disable CS0436 // Type conflicts with imported type
     public abstract partial class HostStrategy : Strategy
+#pragma warning restore CS0436 // Type conflicts with imported type
     {
         private LayerStrategy _layer;
         private Engines.ExecutionEngine _eEngine;
-        private List<LogicBlock> _metaBlocks;
+        private List<Block.LogicBlock> _metaBlocks;
 
         protected abstract bool Register();
 
@@ -35,17 +36,21 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK
         // Main Entry Point
         protected override void OnBarUpdate()
         {
-           SignalContext Cx0 = _layer.Forward();
-            List<LogicTicket> Lts = [];
-            
-            foreach (LogicBlock lb in _metaBlocks)
-            {
-                LogicTicket lt0 = lb.SafeGuardForward([]);
-                if ((bool)lt0.Values[0] == true)
-                    return;
-            }
+            LayerStrategy.SignalContext Cx0 = _layer.Forward();
+            List<object> Lts = [];
+
+            if (_metaBlocks != null && _metaBlocks.Count != 0)
+                foreach (Block.LogicBlock lb in _metaBlocks)
+                {
+                    var lt0 = lb.SafeGuardForward([]);
+                    Lts.Add(lt0);
+                    if ((bool)lt0 == true)
+                        return;
+                }
+            else return;
 
             _eEngine.Execute(Cx0);
+            return;
         }
     }
 }

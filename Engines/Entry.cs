@@ -2,20 +2,22 @@
 using NinjaTrader.NinjaScript.Strategies;
 using System;
 using System.Collections.Generic;
+using NinjaTrader.Custom.AddOns.Aurora.SDK.Block;
 
 namespace NinjaTrader.Custom.AddOns.Aurora.SDK.Engines
 {
-    public sealed class SignalEngine
+    public sealed class EntryHandler
     {
-        public struct SignalProduct
+        public struct EntryProduct
         {
             public OrderType OrderType;
             public MarketPosition Direction;
+            public int Size;
             public string Name;
 
-            public static SignalProduct Flat(string name)
+            public static EntryProduct Flat(string name)
             {
-                return new SignalProduct
+                return new EntryProduct
                 {
                     OrderType = OrderType.Market,
                     Direction = MarketPosition.Flat,
@@ -24,12 +26,12 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK.Engines
             }
         }
 
-        public SignalEngine(HostStrategy host, List<LogicBlock> logicBlocks)
+        public EntryHandler(HostStrategy host, List<LogicBlock> logicBlocks)
         {
-            
+            // Initialization code can be added here if needed
         }
 
-        public SignalProduct Evaluate()
+        public EntryProduct Evaluate()
         {
             return new();
         }

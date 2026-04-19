@@ -1,4 +1,4 @@
-﻿using NinjaTrader.NinjaScript.Strategies;
+using NinjaTrader.NinjaScript.Strategies;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -7,17 +7,21 @@ using System.Threading.Tasks;
 
 namespace NinjaTrader.Custom.AddOns.Aurora.SDK.Engines
 {
-    public sealed class RiskEngine
+    public sealed class ExitHandler
     {
-        public struct RiskProduct
+        public struct ExitProduct
         {
             public int Size;
         }
 
+#pragma warning disable CS0436 // Type conflicts with imported type
         private readonly Strategy _host;
-        private readonly List<LogicBlock> _logicBlocks;
+#pragma warning restore CS0436 // Type conflicts with imported type
+        private readonly List<Block.LogicBlock> _logicBlocks;
 
-        public RiskEngine(Strategy host, List<LogicBlock> logicBlocks)
+#pragma warning disable CS0436 // Type conflicts with imported type
+        public ExitHandler(Strategy host, List<Block.LogicBlock> logicBlocks)
+#pragma warning restore CS0436 // Type conflicts with imported type
         {
             //_host = Guard.NotNull(host, nameof(host));
             //_logicBlocks = [.. Guard.NotNullList(_host.SortLogicBlocks(logicBlocks, BlockTypes.Risk), nameof(logicBlocks))];
@@ -25,7 +29,6 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK.Engines
             for (int i = 0; i < _logicBlocks.Count; i++)
             {
                 var lb = _logicBlocks[i] ?? throw new ArgumentException("LogicBlocks contains a null element.", nameof(logicBlocks));
-                Guard.Require(lb.Type == BlockTypes.Risk, $"RiskEngine expects BlockTypes.Risk blocks only (found: {lb.Type}).");
             }
         }
 
@@ -40,9 +43,9 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK.Engines
         }
 
 
-        public RiskProduct Evaluate()
+        public ExitProduct Evaluate()
         {
-            var rp = new RiskProduct
+            var rp = new ExitProduct
             {
                 Size = 0,
             };
@@ -67,36 +70,34 @@ namespace NinjaTrader.Custom.AddOns.Aurora.SDK.Engines
                     var lb = _logicBlocks[i];
                     if (lb == null || !lb.Initialized)
                         continue;
-
-                    LogicTicket ticket;
+			
                     try
                     {
-                        ticket = lb.SafeGuardForward([]);
-                    }
+                        var ticket = lb.SafeGuardForward([]);
+						
+						if (ticket == null)
+                        	continue;
+						
+						switch (lb.SubType)
+                    	{
+                        	case Block.BlockSubTypes.Multiplier:
+                            	if (SafeGuard.Safe.TryToDouble(ticket, out var mul))
+                                	multipliers.Add(mul);
+                            	break;
+
+                        	case Block.BlockSubTypes.Limit:
+                            	if (SafeGuard.Safe.TryToInt(ticket, out var lim))
+                                	contractLimit = Math.Min(contractLimit, Math.Max(0, lim));
+                            	break;
+
+                        	default:
+                            	throw new NotSupportedException($"RiskEngine: unsupported subtype: {lb.SubType}");
+                    	}
+					}
                     catch (Exception ex)
                     {
                         //_host.ATDebug($"RiskEngine: Forward() failed for block subtype {lb.SubType}. {ex}", LogMode.Log, LogLevel.Error);
                         throw;
-                    }
-
-                    var values = ticket.Values;
-                    if (values == null || values.Count == 0)
-                        continue;
-
-                    switch (lb.SubType)
-                    {
-                        case BlockSubTypes.Multiplier:
-                            if (Safe.TryGetAt(values, 0, out var m0) && Safe.TryToDouble(m0, out var mul))
-                                multipliers.Add(mul);
-                            break;
-
-                        case BlockSubTypes.Limit:
-                            if (Safe.TryGetAt(values, 0, out var l0) && Safe.TryToInt(l0, out var lim))
-                                contractLimit = Math.Min(contractLimit, Math.Max(0, lim));
-                            break;
-
-                        default:
-                            throw new NotSupportedException($"RiskEngine: unsupported subtype: {lb.SubType}");
                     }
                 }
 
